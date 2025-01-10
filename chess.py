@@ -9,6 +9,39 @@ class Piece:
     def __str__(self):
         return self.symbol
 
+class Position:
+    def __init__(self, col, row):
+        self.col = col
+        self.row = row
+        if not (0 <= self.col < 8 and 0 <= self.row < 8):
+            raise ValueError(f"Invalid position: ({self.col}, {self.row })")
+    def __str__(self):
+        return f"{chr(97 + self.col)}{self.row + 1}"
+    def __sub__ (self, other):
+        return Move((self.col, self.row), (other.col, other.row))
+    def __add__(self, dcol, drow):
+        return Position(self.col + dcol, self.row + drow)
+    def __getitem__(self, index):
+        if index == 0:
+            return self.col
+        elif index == 1:
+            return self.row
+        else:
+            raise IndexError("Index out of range.")
+
+class Move:
+    def __init__(self, start, end, promotion=None):
+        self.start = start
+        self.end = end
+        self.promotion = promotion
+
+        if not (0 <= self.start[0] < 8 and 0 <= self.start[1] < 8):
+            raise ValueError(f"Invalid start position: {self.start}")
+        if not (0 <= self.end[0] < 8 and 0 <= self.end[1] < 8):
+            raise ValueError(f"Invalid end position: {self.end}")
+        if self.start == self.end:
+            raise ValueError("Start and end positions are the same.")
+
 class Pawn(Piece):
     def __init__(self, color):
         super().__init__(color)
@@ -19,7 +52,7 @@ class Pawn(Piece):
         else:
             self.name = "p"
             self.symbol = "♟"
-    def valid_movement(self, move):
+    def pseudo_legal(self, move):
         col = move.end[0] - move.start[0]
         row = move.end[1] - move.start[1]
         if self.color == White:
@@ -37,7 +70,7 @@ class Rook(Piece):
         else:
             self.name = "r"
             self.symbol = "♜"
-    def valid_movement(self, move):
+    def pseudo_legal(self, move):
         col = move.end[0] - move.start[0]
         row = move.end[1] - move.start[1]
         return col == 0 or row == 0
@@ -52,7 +85,7 @@ class Knight(Piece):
         else:
             self.name = "n"
             self.symbol = "♞"
-    def valid_movement(self, move):
+    def pseudo_legal(self, move):
         col = move.end[0] - move.start[0]
         row = move.end[1] - move.start[1]
         return abs(col*row) == 2
@@ -67,7 +100,7 @@ class Bishop(Piece):
         else:
             self.name = "b"
             self.symbol = "♝"
-    def valid_movement(self, move):
+    def pseudo_legal(self, move):
         col = move.end[0] - move.start[0]
         row = move.end[1] - move.start[1]
         return abs(col) == abs(row)
@@ -82,7 +115,7 @@ class Queen(Piece):
         else:
             self.name = "q"
             self.symbol = "♛"
-    def valid_movement(self, move): 
+    def pseudo_legal(self, move): 
         col = move.end[0] - move.start[0]
         row = move.end[1] - move.start[1]
         return col == 0 or row == 0 or abs(col) == abs(row)
@@ -97,15 +130,10 @@ class King(Piece):
         else:
             self.name = "k"
             self.symbol = "♚"
-    def valid_movement(self, move):
+    def pseudo_legal(self, move):
         col = move.end[0] - move.start[0]
         row = move.end[1] - move.start[1]
         return abs(col) <= 1 and abs(row) <= 1
-
-class Move:
-    def __init__(self, start, end):
-        self.start = start
-        self.end = end
 
 class Board:
     def __init__(self):
