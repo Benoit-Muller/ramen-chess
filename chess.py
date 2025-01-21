@@ -11,15 +11,14 @@ class Piece:
 
 class Position:
     def __init__(self, col, row):
-        self.col = col
-        self.row = row
         if not (0 <= self.col < 8 and 0 <= self.row < 8):
             raise ValueError(f"Invalid position: ({self.col}, {self.row })")
+        self.col = col
+        self.row = row
     def __str__(self):
         return f"{chr(97 + self.col)}{self.row + 1}"
-    def __sub__ (self, other):
-        return Move((self.col, self.row), (other.col, other.row))
-    def __add__(self, dcol, drow):
+    def __add__(self, other):
+        dcol, drow = other
         return Position(self.col + dcol, self.row + drow)
     def __getitem__(self, index):
         if index == 0:
@@ -28,19 +27,20 @@ class Position:
             return self.row
         else:
             raise IndexError("Index out of range.")
+    def __eq__(self, other):
+        return self.col == other.col and self.row == other.row
 
 class Move:
     def __init__(self, start, end, promotion=None):
+        if not isinstance(start, Position):
+            start = Position(*start)
+        if not isinstance(end, Position):
+            end = Position(*end)
+        if start == end:
+            raise ValueError("Start and end positions are the same.")
         self.start = start
         self.end = end
         self.promotion = promotion
-
-        if not (0 <= self.start[0] < 8 and 0 <= self.start[1] < 8):
-            raise ValueError(f"Invalid start position: {self.start}")
-        if not (0 <= self.end[0] < 8 and 0 <= self.end[1] < 8):
-            raise ValueError(f"Invalid end position: {self.end}")
-        if self.start == self.end:
-            raise ValueError("Start and end positions are the same.")
 
 class Pawn(Piece):
     def __init__(self, color):
@@ -138,54 +138,35 @@ class King(Piece):
 class Board:
     def __init__(self):
         self.grid = [[None for _ in range(8)] for _ in range(8)]
-        self.starting_position()
 
-    def starting_position(self):
+    def set_starting_position(self):
         self.clear()
-        self.add_starting_pieces()
-
-    def add_starting_pieces(self):
+        pieces= [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col in range(8):
-            self.set_piece((col, 1), Pawn(White))
-            self.set_piece((col, 6), Pawn(Black))
-        self.set_piece((0, 0), Rook(White))
-        self.set_piece((1, 0), Knight(White))
-        self.set_piece((2, 0), Bishop(White))
-        self.set_piece((3, 0), Queen(White))
-        self.set_piece((4, 0), King(White))
-        self.set_piece((5, 0), Bishop(White))
-        self.set_piece((6, 0), Knight(White))
-        self.set_piece((7, 0), Rook(White))
+            self[col,0] = pieces[col](White)
+            self[col,1] = Pawn(White)
+            self[col,6] = Pawn(Black)
+            self[col,7] = pieces[col](Black)
 
-        self.set_piece((0, 7), Rook(Black))
-        self.set_piece((1, 7), Knight(Black))
-        self.set_piece((2, 7), Bishop(Black))
-        self.set_piece((3, 7), Queen(Black))
-        self.set_piece((4, 7), King(Black))
-        self.set_piece((5, 7), Bishop(Black))
-        self.set_piece((6, 7), Knight(Black))
-        self.set_piece((7, 7), Rook(Black))
-
-    def get_piece(self, place):
-        return self.grid[place[0]][place[1]]
-
-    def set_piece(self, place, piece):
-        self.grid[place[0]][place[1]] = piece
+    def __getitem__(self, position):
+        return self.grid[position[0]][position[1]]
+    def __setitem__(self, position, piece):
+        self.grid[position[0]][position[1]] = piece
 
     def move_piece(self, move, show=False):
-        if self.get_piece(move.start) is None:
+        if self[move.start] is None:
             warnings.warn("Start square is empty.", Warning)
         else:
-            capture = self.get_piece(move.end)
-            self.set_piece(move.end, self.get_piece(move.start))
+            capture = self[move.end]
+            self[move.end] = self[move.start]
             self.clear(move.start)
             if show:
                 print(self)
             return capture
 
-    def clear(self, place=None):
-        if place:
-            self.grid[place[0]][place[1]] = None
+    def clear(self, position=None):
+        if position is not None:
+            self[position] = None
         else:
             self.grid = [[None for _ in range(8)] for _ in range(8)]
 
@@ -203,6 +184,6 @@ class Board:
 class Game:
     def __init__(self):
         self.board = Board()
+        self.board.set_starting_position()
         self.turn = White
         self.moves = []
-        self.result = None
