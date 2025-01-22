@@ -11,8 +11,12 @@ class Piece:
 
 class Position:
     def __init__(self, col, row):
-        if not (0 <= self.col < 8 and 0 <= self.row < 8):
-            raise ValueError(f"Invalid position: ({self.col}, {self.row })")
+        if isinstance(col, str):
+            col = ord(col) - ord('a')
+        if isinstance(row, str):
+            row = int(row) - 1
+        if not (0 <= col < 8 and 0 <= row < 8):
+            raise ValueError(f"Invalid position: ({col}, {row})")
         self.col = col
         self.row = row
     def __str__(self):
@@ -41,6 +45,19 @@ class Move:
         self.start = start
         self.end = end
         self.promotion = promotion
+    def __str__(self):
+        return str(self.start) + str(self.end) + (self.promotion or "")
+    def __eq__(self, other):
+        return self.start == other.start and self.end == other.end and self.promotion == other.promotion
+
+def Move_from_string(s):
+    start= Position(s[0], s[1])
+    end = Position(s[2], s[3])
+    if len(s) == 5:
+        promotion = s[4]
+    else:
+        promotion = None
+    return Move(start, end, promotion)
 
 class Pawn(Piece):
     def __init__(self, color):
@@ -153,16 +170,17 @@ class Board:
     def __setitem__(self, position, piece):
         self.grid[position[0]][position[1]] = piece
 
-    def move_piece(self, move, show=False):
+    def move(self, move, show=False):
+        if isinstance(move, str):
+            move = Move_from_string(move)
         if self[move.start] is None:
             warnings.warn("Start square is empty.", Warning)
-        else:
-            capture = self[move.end]
-            self[move.end] = self[move.start]
-            self.clear(move.start)
-            if show:
-                print(self)
-            return capture
+        capture = self[move.end]
+        self[move.end] = self[move.start] #fix promotion
+        self.clear(move.start)
+        if show:
+            print(self)
+        return capture
 
     def clear(self, position=None):
         if position is not None:
@@ -173,17 +191,17 @@ class Board:
     def __str__(self):
         s = ""
         for row in range(7, -1, -1):
-            s += str(row + 1) + "| "
+            s += str(row + 1) + " | "
             for col in range(8):
                 piece = self.grid[col][row]
                 s += (str(piece) if piece else '.') + " "
             s += "\n"
-        s += "   a b c d e f g h"
+        s += "   ––––––––––––––––\n"
+        s += "    a b c d e f g h"
         return s
 
 class Game:
     def __init__(self):
         self.board = Board()
         self.board.set_starting_position()
-        self.turn = White
         self.moves = []
