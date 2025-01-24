@@ -1,13 +1,32 @@
 import warnings
 
-White = True
-Black = False
+WHITE = True
+BLACK = False
 
 class Piece:
     def __init__(self, color):
         self.color = color
     def __str__(self):
         return self.symbol
+    def __eq__(self, value):
+        return self.color == value.color and self.type == value.type
+    def pseudo_legal_slide(self, board, start, dpos):
+        moves = []
+        end=start
+        while True:
+            try:
+                end = end + dpos
+            except:
+                break
+            else:
+                piece = board[end]
+                if piece is None:
+                    moves.append(Move(start, end))
+                else:
+                    if piece.color != self.color:
+                        moves.append(Move(start, end))
+                    break
+        return moves
 
 class Position:
     def __init__(self, col, row):
@@ -49,108 +68,149 @@ class Move:
         return str(self.start) + str(self.end) + (self.promotion or "")
     def __eq__(self, other):
         return self.start == other.start and self.end == other.end and self.promotion == other.promotion
+    @staticmethod
+    def from_string(s):
+        start= Position(s[0], s[1])
+        end = Position(s[2], s[3])
+        if len(s) == 5:
+            promotion = s[4]
+        else:
+            promotion = None
+        return Move(start, end, promotion)
 
-def Move_from_string(s):
-    start= Position(s[0], s[1])
-    end = Position(s[2], s[3])
-    if len(s) == 5:
-        promotion = s[4]
-    else:
-        promotion = None
-    return Move(start, end, promotion)
+types = ["pawn", "rook", "knight", "bishop", "queen", "king"]
+names_white = ["P", "R", "N", "B", "Q", "K"]
+names_black = ["p", "r", "n", "b", "q", "k"]
+symbols_white = ["♙", "♖", "♘", "♗", "♕", "♔"]
+symbols_black = ["♟", "♜", "♞", "♝", "♛", "♚"]
+
 
 class Pawn(Piece):
     def __init__(self, color):
         super().__init__(color)
         self.type = "pawn"
-        if color == White:
+        if color == WHITE:
             self.name = "P"
             self.symbol = "♙"
         else:
             self.name = "p"
             self.symbol = "♟"
-    def pseudo_legal(self, move):
-        col = move.end[0] - move.start[0]
-        row = move.end[1] - move.start[1]
-        if self.color == White:
-            return abs(col) <= 1 and row == 1
-        else:
-            return abs(col) <= 1 and row == -1
+    def pseudo_legal_moves(self, board, start):
+        return [] # TODO: implement
+            
 
 class Rook(Piece):
     def __init__(self, color):
         super().__init__(color)
         self.type = "rook"
-        if color == White:
+        if color == WHITE:
             self.name = "R"
             self.symbol = "♖"
         else:
             self.name = "r"
             self.symbol = "♜"
-    def pseudo_legal(self, move):
-        col = move.end[0] - move.start[0]
-        row = move.end[1] - move.start[1]
-        return col == 0 or row == 0
+    def pseudo_legal_moves(self, board, start):
+        moves = []
+        for dpos in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            moves += self.pseudo_legal_slide(board, start, dpos)
+        return moves
 
 class Knight(Piece):
     def __init__(self, color):
         super().__init__(color)
         self.type = "knight"
-        if color == White:
+        if color == WHITE:
             self.name = "N"
             self.symbol = "♘"
         else:
             self.name = "n"
             self.symbol = "♞"
-    def pseudo_legal(self, move):
-        col = move.end[0] - move.start[0]
-        row = move.end[1] - move.start[1]
-        return abs(col*row) == 2
+    def pseudo_legal_moves(self, board, start):
+        moves = []
+        for dpos in [(2, 1), (1, 2), (-1, 2), (-2, 1), (-2, -1), (-1, -2), (1, -2), (2, -1)]:
+            try:
+                end = start + dpos
+            except:
+                continue
+            else:
+                piece = board[end]
+                if piece is None or piece.color != self.color:
+                    moves.append(Move(start, end))
+        return moves
+
 
 class Bishop(Piece):
     def __init__(self, color):
         super().__init__(color)
         self.type = "bishop"
-        if color == White:
+        if color == WHITE:
             self.name = "B"
             self.symbol = "♗"
         else:
             self.name = "b"
             self.symbol = "♝"
-    def pseudo_legal(self, move):
-        col = move.end[0] - move.start[0]
-        row = move.end[1] - move.start[1]
-        return abs(col) == abs(row)
+    def pseudo_legal_moves(self, board, start):
+        moves = []
+        for dpos in [(1, 1), (-1, 1), (1, -1), (-1, -1)]:
+            moves += self.pseudo_legal_slide(board, start, dpos)
+        return moves
 
 class Queen(Piece):
     def __init__(self, color):
         super().__init__(color)
         self.type = "queen"
-        if color == White:
+        if color == WHITE:
             self.name = "Q"
             self.symbol = "♕"
         else:
             self.name = "q"
             self.symbol = "♛"
-    def pseudo_legal(self, move): 
-        col = move.end[0] - move.start[0]
-        row = move.end[1] - move.start[1]
-        return col == 0 or row == 0 or abs(col) == abs(row)
+    def pseudo_legal_moves(self, board, start):
+        moves = []
+        for dcol in [-1, 0, 1]:
+            for drow in [-1, 0, 1]:
+                if dcol == 0 and drow == 0:
+                    continue
+                dpos = (dcol, drow)
+                moves += self.pseudo_legal_slide(board, start, dpos)
+        return moves
 
 class King(Piece):
     def __init__(self, color):
         super().__init__(color)
         self.type = "king"
-        if color == White:
+        if color == WHITE:
             self.name = "K"
             self.symbol = "♔"
         else:
             self.name = "k"
             self.symbol = "♚"
-    def pseudo_legal(self, move):
-        col = move.end[0] - move.start[0]
-        row = move.end[1] - move.start[1]
-        return abs(col) <= 1 and abs(row) <= 1
+    def pseudo_legal_moves(self, board, start):
+        moves = []
+        for dcol in [-1, 0, 1]:
+            for drow in [-1, 0, 1]:
+                if dcol == 0 and drow == 0:
+                    continue
+                dpos = (dcol, drow)
+                try:
+                    end = start + dpos
+                except:
+                    continue
+                else:
+                    piece = board[end]
+                    if piece is None or piece.color != self.color:
+                        moves.append(Move(start, end))
+        #castling moves
+        if self.color == WHITE:
+            row = 0
+        else:
+            row = 7
+        if start == Position(4, row):
+            if board[5, row] is None and board[6, row] is None and board[7, row] == Rook(self.color):
+                moves.append(Move(start, Position(6, row)))
+            if board[3, row] is None and board[2, row] is None and board[1, row] is None and board[0, row] == Rook(self.color):
+                moves.append(Move(start, Position(2, row)))
+        return moves
 
 class Board:
     def __init__(self):
@@ -160,10 +220,10 @@ class Board:
         self.clear()
         pieces= [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col in range(8):
-            self[col,0] = pieces[col](White)
-            self[col,1] = Pawn(White)
-            self[col,6] = Pawn(Black)
-            self[col,7] = pieces[col](Black)
+            self[col,0] = pieces[col](WHITE)
+            self[col,1] = Pawn(WHITE)
+            self[col,6] = Pawn(BLACK)
+            self[col,7] = pieces[col](BLACK)
 
     def __getitem__(self, position):
         return self.grid[position[0]][position[1]]
@@ -172,11 +232,11 @@ class Board:
 
     def move(self, move, show=False):
         if isinstance(move, str):
-            move = Move_from_string(move)
+            move = Move.from_string(move)
         if self[move.start] is None:
             warnings.warn("Start square is empty.", Warning)
         capture = self[move.end]
-        self[move.end] = self[move.start] #fix promotion
+        self[move.end] = self[move.start] # TODO: fix promotion
         self.clear(move.start)
         if show:
             print(self)
@@ -199,6 +259,14 @@ class Board:
         s += "   ––––––––––––––––\n"
         s += "    a b c d e f g h"
         return s
+    def pseudo_legal_moves(self, color):
+        moves = []
+        for col in range(8):
+            for row in range(8):
+                piece = self[col, row]
+                if piece is not None and piece.color == color:
+                    moves += piece.pseudo_legal_moves(self, Position(col, row))
+        return moves
 
 class Game:
     def __init__(self):
