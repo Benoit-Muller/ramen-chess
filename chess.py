@@ -4,6 +4,12 @@ WHITE = True
 BLACK = False
 
 class Piece:
+    types = ["pawn", "rook", "knight", "bishop", "queen", "king"]
+    type_ids = {type: i for i, type in enumerate(types)}
+    names_white = ["P", "R", "N", "B", "Q", "K"]
+    names_black = ["p", "r", "n", "b", "q", "k"]
+    symbols_white = ["♙", "♖", "♘", "♗", "♕", "♔"]
+    symbols_black = ["♟", "♜", "♞", "♝", "♛", "♚"]
     def __init__(self, color):
         self.color = color
     def __str__(self):
@@ -27,6 +33,13 @@ class Piece:
                         moves.append(Move(start, end))
                     break
         return moves
+        @staticmethod
+        def from_string(name):
+            #TODO: implement
+
+
+
+            
 
 class Position:
     def __init__(self, col, row):
@@ -61,6 +74,8 @@ class Move:
             end = Position(*end)
         if start == end:
             raise ValueError("Start and end positions are the same.")
+        if isinstance(promotion, str):
+            promotion = Piece.from_type(promotion, start.color)
         self.start = start
         self.end = end
         self.promotion = promotion
@@ -78,13 +93,6 @@ class Move:
             promotion = None
         return Move(start, end, promotion)
 
-types = ["pawn", "rook", "knight", "bishop", "queen", "king"]
-names_white = ["P", "R", "N", "B", "Q", "K"]
-names_black = ["p", "r", "n", "b", "q", "k"]
-symbols_white = ["♙", "♖", "♘", "♗", "♕", "♔"]
-symbols_black = ["♟", "♜", "♞", "♝", "♛", "♚"]
-
-
 class Pawn(Piece):
     def __init__(self, color):
         super().__init__(color)
@@ -96,8 +104,52 @@ class Pawn(Piece):
             self.name = "p"
             self.symbol = "♟"
     def pseudo_legal_moves(self, board, start):
-        return [] # TODO: implement
-            
+        moves=[]
+        sign = 1 if self.color == BLACK else -1
+        # one forward
+        end = start + (0, 1)  # should always work
+        if board[end] is None:
+            moves.append(Move(start, end))
+        # two forward
+        if (start.row == 1 and self.color == WHITE) or (start.row == 6 and self.color == BLACK):
+            end = start + (0, sign*2)
+            if board[end] is None and board[start + (0, sign)] is None:
+                moves.append(Move(start, end))
+        # take
+        for dcol in [-1, 1]:
+            try:
+                end = start + (dcol, sign)
+            except:
+                continue
+            else:
+                piece = board[end]
+                if piece is not None and piece.color != self.color:
+                    moves.append(Move(start, end))
+        # en-passant
+        if self.color == WHITE:
+            row = 4
+        else:
+            row = 3 
+        for dcol in [-1, 1]:
+            try:
+                end = start + (dcol, sign)
+            except:
+                continue
+            else:
+                piece = board[end- (0, sign)]
+                if isinstance(piece, Pawn) and piece.color != self.color:
+                    moves.append(Move(start, end))
+        # handle promotions of added pawn moves
+        for move in moves:
+            if move.end.row in [0, 7]:
+                move.promotion = Queen(self.color)
+                moves.append(Move(start, end, promotion="Q"))
+                moves.append(Move(start, end, promotion="R"))
+                moves.append(Move(start, end, promotion="B"))
+                moves.append(Move(start, end, promotion="N"))
+
+                
+
 
 class Rook(Piece):
     def __init__(self, color):
