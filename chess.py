@@ -43,7 +43,7 @@ class Piece:
                     break
         return moves
     @staticmethod
-    def from_string(self,name):
+    def from_string(name):
         color = name.isupper()
         if name.lower() == "p":
             return Pawn(color)
@@ -120,7 +120,7 @@ class Pawn(Piece):
         super().__init__(color, "pawn")
     def pseudo_legal_moves(self, board, start):
         moves=[]
-        sign = 1 if self.color == BLACK else -1
+        sign = 1 if self.color == WHITE else -1
         # one forward
         end = start + (0, 1)  # should always work
         if board[end] is None:
@@ -151,20 +151,16 @@ class Pawn(Piece):
             except:
                 continue
             else:
-                piece = board[end- (0, sign)]
+                piece = board[end + (0, -sign)]
                 if isinstance(piece, Pawn) and piece.color != self.color:
                     moves.append(Move(start, end))
         # handle promotions of added pawn moves
         for move in moves:
             if move.end.row in [0, 7]:
                 move.promotion = Queen(self.color)
-                moves.append(Move(start, end, promotion="Q"))
-                moves.append(Move(start, end, promotion="R"))
-                moves.append(Move(start, end, promotion="B"))
-                moves.append(Move(start, end, promotion="N"))
-
-                
-
+                for promotion in [Rook, Bishop, Knight]:
+                    moves.append(Move(move.start, move.end, promotion(self.color)))
+        return moves
 
 class Rook(Piece):
     def __init__(self, color):
@@ -259,6 +255,7 @@ class Board:
 
     def __getitem__(self, position):
         return self.grid[position[0]][position[1]]
+    
     def __setitem__(self, position, piece):
         self.grid[position[0]][position[1]] = piece
 
@@ -268,15 +265,31 @@ class Board:
         if self[move.start] is None:
             warnings.warn("Start square is empty.", Warning)
         capture = self[move.end]
-        self[move.end] = self[move.start] # TODO: fix promotion
+        if move.promotion is None:
+            self[move.end] = self[move.start]
+        else:
+            self[move.end] = move.promotion
         self.clear(move.start)
-        if show:
+        # Handle castling
+        if isinstance(self[move.end], King) and abs(move.start.col - move.end.col) == 2:
+            if move.end.col == 6:  # Kingside castling
+                self[Position(5, move.start.row)] = self[Position(7, move.start.row)]
+                self.clear(Position(7, move.start.row))
+            elif move.end.col == 2:  # Queenside castling
+                self[Position(3, move.start.row)] = self[Position(0, move.start.row)]
+                self.clear(Position(0, move.start.row))
+        # Handle en-passant
+        if isinstance(self[move.end], Pawn) and move.start.col != move.end.col and self[move.end] is None:
+            capture = self.clear(move.start + (move.end.col - move.start.col, 0))
+        if show: 
             print(self)
         return capture
 
     def clear(self, position=None):
         if position is not None:
+            piece = self[position]
             self[position] = None
+            return piece
         else:
             self.grid = [[None for _ in range(8)] for _ in range(8)]
 
@@ -291,6 +304,7 @@ class Board:
         s += "   ––––––––––––––––\n"
         s += "    a b c d e f g h"
         return s
+    
     def pseudo_legal_moves(self, color):
         moves = []
         for col in range(8):
@@ -305,3 +319,12 @@ class Game:
         self.board = Board()
         self.board.set_starting_position()
         self.moves = []
+    def move(self, move):
+        self.moves.append(move)
+        return self.board.move(move)
+    def turn(self):
+        return len(self.moves) % 2 == 0
+    def __str__(self):
+        return str(self.board)
+    def pseudo_legal_moves(self):
+        return self.board.pseudo_legal_moves(self.turn())
