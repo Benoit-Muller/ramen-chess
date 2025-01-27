@@ -285,6 +285,11 @@ class Board:
             print(self)
         return capture
 
+    def show_move(self, move):
+        board_copy = Board()
+        board_copy.grid = [row[:] for row in self.grid]
+        board_copy.move(move, show=True)
+
     def clear(self, position=None):
         if position is not None:
             piece = self[position]
