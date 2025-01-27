@@ -5,18 +5,27 @@ BLACK = False
 
 class Piece:
     types = ["pawn", "rook", "knight", "bishop", "queen", "king"]
-    type_ids = {type: i for i, type in enumerate(types)}
     names_white = ["P", "R", "N", "B", "Q", "K"]
     names_black = ["p", "r", "n", "b", "q", "k"]
     symbols_white = ["♙", "♖", "♘", "♗", "♕", "♔"]
     symbols_black = ["♟", "♜", "♞", "♝", "♛", "♚"]
-    def __init__(self, color):
+    def __init__(self, color, type):
+        if self.__class__ == Piece:
+            raise TypeError("Piece is an abstract class and cannot be instantiated directly.")
         self.color = color
+        self.type = type
+        if color == WHITE:
+            self.name = self.names_white[self.types.index(type)]
+            self.symbol = self.symbols_white[self.types.index(type)]
+        else:
+            self.name = self.names_black[self.types.index(type)]
+            self.symbol = self.symbols_black[self.types.index(type)]
     def __str__(self):
         return self.symbol
     def __eq__(self, value):
-        return self.color == value.color and self.type == value.type
+        return isinstance(value, Piece) and value.name == self.name
     def pseudo_legal_slide(self, board, start, dpos):
+        """ Return a list of pseudo-legal sliding moves in the direction dpos. """
         moves = []
         end=start
         while True:
@@ -33,13 +42,23 @@ class Piece:
                         moves.append(Move(start, end))
                     break
         return moves
-        @staticmethod
-        def from_string(name):
-            #TODO: implement
-
-
-
-            
+    @staticmethod
+    def from_string(self,name):
+        color = name.isupper()
+        if name.lower() == "p":
+            return Pawn(color)
+        elif name.lower() == "r":
+            return Rook(color)
+        elif name.lower() == "n":
+            return Knight(color)
+        elif name.lower() == "b":
+            return Bishop(color)
+        elif name.lower() == "q":
+            return Queen(color)
+        elif name.lower() == "k":
+            return King(color)
+        else:
+            raise ValueError(f"Invalid piece name: {name}")
 
 class Position:
     def __init__(self, col, row):
@@ -65,6 +84,9 @@ class Position:
             raise IndexError("Index out of range.")
     def __eq__(self, other):
         return self.col == other.col and self.row == other.row
+    @staticmethod
+    def from_string(s):
+        return Position(s[0], s[1])
 
 class Move:
     def __init__(self, start, end, promotion=None):
@@ -85,24 +107,17 @@ class Move:
         return self.start == other.start and self.end == other.end and self.promotion == other.promotion
     @staticmethod
     def from_string(s):
-        start= Position(s[0], s[1])
-        end = Position(s[2], s[3])
+        start= Position.from_string(s[:2])
+        end = Position.from_string(s[2:4])
         if len(s) == 5:
-            promotion = s[4]
+            promotion = Piece.from_string(s[4])
         else:
             promotion = None
         return Move(start, end, promotion)
 
 class Pawn(Piece):
     def __init__(self, color):
-        super().__init__(color)
-        self.type = "pawn"
-        if color == WHITE:
-            self.name = "P"
-            self.symbol = "♙"
-        else:
-            self.name = "p"
-            self.symbol = "♟"
+        super().__init__(color, "pawn")
     def pseudo_legal_moves(self, board, start):
         moves=[]
         sign = 1 if self.color == BLACK else -1
@@ -153,14 +168,7 @@ class Pawn(Piece):
 
 class Rook(Piece):
     def __init__(self, color):
-        super().__init__(color)
-        self.type = "rook"
-        if color == WHITE:
-            self.name = "R"
-            self.symbol = "♖"
-        else:
-            self.name = "r"
-            self.symbol = "♜"
+        super().__init__(color, "rook")
     def pseudo_legal_moves(self, board, start):
         moves = []
         for dpos in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
@@ -169,14 +177,7 @@ class Rook(Piece):
 
 class Knight(Piece):
     def __init__(self, color):
-        super().__init__(color)
-        self.type = "knight"
-        if color == WHITE:
-            self.name = "N"
-            self.symbol = "♘"
-        else:
-            self.name = "n"
-            self.symbol = "♞"
+        super().__init__(color, "knight")
     def pseudo_legal_moves(self, board, start):
         moves = []
         for dpos in [(2, 1), (1, 2), (-1, 2), (-2, 1), (-2, -1), (-1, -2), (1, -2), (2, -1)]:
@@ -193,14 +194,7 @@ class Knight(Piece):
 
 class Bishop(Piece):
     def __init__(self, color):
-        super().__init__(color)
-        self.type = "bishop"
-        if color == WHITE:
-            self.name = "B"
-            self.symbol = "♗"
-        else:
-            self.name = "b"
-            self.symbol = "♝"
+        super().__init__(color, "bishop")
     def pseudo_legal_moves(self, board, start):
         moves = []
         for dpos in [(1, 1), (-1, 1), (1, -1), (-1, -1)]:
@@ -209,14 +203,7 @@ class Bishop(Piece):
 
 class Queen(Piece):
     def __init__(self, color):
-        super().__init__(color)
-        self.type = "queen"
-        if color == WHITE:
-            self.name = "Q"
-            self.symbol = "♕"
-        else:
-            self.name = "q"
-            self.symbol = "♛"
+        super().__init__(color, "queen")
     def pseudo_legal_moves(self, board, start):
         moves = []
         for dcol in [-1, 0, 1]:
@@ -229,14 +216,7 @@ class Queen(Piece):
 
 class King(Piece):
     def __init__(self, color):
-        super().__init__(color)
-        self.type = "king"
-        if color == WHITE:
-            self.name = "K"
-            self.symbol = "♔"
-        else:
-            self.name = "k"
-            self.symbol = "♚"
+        super().__init__(color, "king")
     def pseudo_legal_moves(self, board, start):
         moves = []
         for dcol in [-1, 0, 1]:
