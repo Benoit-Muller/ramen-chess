@@ -1,4 +1,6 @@
 import warnings
+import copy
+
 
 WHITE = True
 BLACK = False
@@ -171,6 +173,8 @@ class Rook(Piece):
             moves += self.pseudo_legal_slide(board, start, dpos)
         return moves
 
+        
+
 class Knight(Piece):
     def __init__(self, color):
         super().__init__(color, "knight")
@@ -243,7 +247,12 @@ class King(Piece):
 class Board:
     def __init__(self):
         self.grid = [[None for _ in range(8)] for _ in range(8)]
-
+    def __eq__(self, value):
+        return isinstance(value, Board) and self.grid == value.grid
+    def copy(self):
+        new_board = Board()
+        new_board.grid = [row.copy() for row in self.grid]
+        return new_board
     def set_starting_position(self):
         self.clear()
         pieces= [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
@@ -281,13 +290,37 @@ class Board:
         # Handle en-passant
         if isinstance(self[move.end], Pawn) and move.start.col != move.end.col and self[move.end] is None:
             capture = self.clear(move.start + (move.end.col - move.start.col, 0))
+            move.en_passant = True
+        else:
+            move.en_passant = False
         if show: 
             print(self)
-        return capture
+        move.capture = capture
+        return move
+    def undo_move(self, move):
+        self[move.start] = self[move.end]
+        self[move.end] = move.capture
+        # Handle castling
+        if isinstance(self[move.start], King) and abs(move.start.col - move.end.col) == 2:
+            if move.end.col == 6:
+                self[Position(7, move.start.row)] = self[Position(5, move.start.row)]
+                self.clear(Position(5, move.start.row))
+            elif move.end.col == 2:
+                self[Position(0, move.start.row)] = self[Position(3, move.start.row)]
+                self.clear(Position(3, move.start.row))
+        # Handle en-passant
+        if isinstance(self[move.end], Pawn): 
+            try:
+                if move.en_passant:
+                    self[move.end] = None
+                    self[move.start + (move.end.col - move.start.col, 0)] = move.capture
+            except:
+                raise ValueError("Missing en-passant information to undo move.")
+        return move
 
+            
     def show_move(self, move):
-        board_copy = Board()
-        board_copy.grid = [row[:] for row in self.grid]
+        board_copy = self.copy()
         board_copy.move(move, show=True)
 
     def clear(self, position=None):
@@ -324,12 +357,32 @@ class Game:
         self.board = Board()
         self.board.set_starting_position()
         self.moves = []
+    def __eq__(self, value):
+        return isinstance(value, Game) and self.board == value.board and self.moves == value.moves
+    def copy(self):
+        new_game = Game()
+        new_game.board = self.board.copy()
+        new_game.moves = self.moves.copy()
+        return new_game
     def move(self, move):
+        move = self.board.move(move)
         self.moves.append(move)
-        return self.board.move(move)
+        # TODO: check if move is legal, rigth turn, etc.
+        return move
+    def undo_move(self):
+        return self.board.undo_move(self.moves.pop())
     def turn(self):
         return len(self.moves) % 2 == 0
     def __str__(self):
-        return str(self.board)
+        s_board = str(self.board)
+        s_moves = ""
+        for i, move in enumerate(self.moves):
+            if i % 2 == 0:
+                s_moves += f"{i//2 + 1}. "
+            s_moves += str(move) + " "
+        s_moves = s_moves[:-1]
+        s_state = "White to move." if self.turn() == WHITE else "Black to move."
+        return s_moves + "\n" + s_board + "\n" + s_state
+
     def pseudo_legal_moves(self):
         return self.board.pseudo_legal_moves(self.turn())
