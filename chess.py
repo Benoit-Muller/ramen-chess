@@ -124,7 +124,7 @@ class Pawn(Piece):
         moves=[]
         sign = 1 if self.color == WHITE else -1
         # one forward
-        end = start + (0, 1)  # should always work
+        end = start + (0, sign)  # should always work
         if board[end] is None:
             moves.append(Move(start, end))
         # two forward
@@ -172,7 +172,6 @@ class Rook(Piece):
         for dpos in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
             moves += self.pseudo_legal_slide(board, start, dpos)
         return moves
-
         
 
 class Knight(Piece):
@@ -386,3 +385,24 @@ class Game:
 
     def pseudo_legal_moves(self):
         return self.board.pseudo_legal_moves(self.turn())
+    
+    def play_interactive(self):
+        print("Game starting, to end game type 'exit'.")
+        while True:
+            print(self)
+            moves = self.pseudo_legal_moves()
+            if len(moves) == 0:
+                print("Game over.")
+                break
+            else:
+                print("Possible moves:",*moves)
+            move = input("Enter move: ")
+            if move == "undo":
+                self.undo_move()
+            elif move == "exit":
+                break
+            elif move == "random":
+                import random
+                self.move(random.choice(moves))
+            else:
+                self.move(move)
