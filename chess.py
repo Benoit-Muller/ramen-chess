@@ -104,9 +104,12 @@ class Move:
         self.end = end
         self.promotion = promotion
     def __str__(self):
-        return str(self.start) + str(self.end) + (self.promotion or "")
+        try:
+            return self.pseudo_algebraic()
+        except:
+            return str(self.start)+str(self.end)
     def __eq__(self, other):
-        return self.start == other.start and self.end == other.end and self.promotion == other.promotion
+        return (self.start, self.end, self.promotion) == (other.start, other.end, other.promotion)
     @staticmethod
     def from_string(s):
         start= Position.from_string(s[:2])
@@ -116,6 +119,36 @@ class Move:
         else:
             promotion = None
         return Move(start, end, promotion)
+    def is_short_castling(self):
+        return isinstance(self.piece, King) and self.end.col - self.start.col == 2
+    def is_long_castling(self):
+        return isinstance(self.piece, King) and self.end.col - self.start.col == -2
+    def is_castiling(self):
+        return self.is_short_castling() or self.is_long_castling()
+    def pseudo_algebraic(self):
+        if self.is_short_castling():
+            return "O-O"
+        if self.is_long_castling():
+            return "O-O-O"
+        san = self.piece.name.upper()
+        san += str(self.start)
+        if self.capture is not None:
+            san += "x"
+        san += str(self.end)
+        if self.promotion is not None:
+            san += "=" + str(self.promotion)
+        return san
+    def interpret(self, board):
+        self.piece = board[self.start]
+        self.capture = board[self.end]
+        self.is_en_passant = (
+            isinstance(self.piece, Pawn) and 
+            self.start.col != self.end.col and 
+            board[self.end] is None
+        )
+        if self.is_en_passant:
+            self.capture = board[self.end + (0, -1 if self.piece.color == WHITE else 1)]
+        return self
 
 class Pawn(Piece):
     def __init__(self, color):
@@ -270,8 +303,7 @@ class Board:
     def move(self, move, show=False):
         if isinstance(move, str):
             move = Move.from_string(move)
-        if self[move.start] is None:
-            warnings.warn("Start square is empty.", Warning)
+        move.interpret(self)
         capture = self[move.end]
         if move.promotion is None:
             self[move.end] = self[move.start]
@@ -349,6 +381,8 @@ class Board:
                 piece = self[col, row]
                 if piece is not None and piece.color == color:
                     moves += piece.pseudo_legal_moves(self, Position(col, row))
+        for i in range(len(moves)):
+            moves[i].interpret(self)
         return moves
 
 class Game:
@@ -372,14 +406,16 @@ class Game:
         return self.board.undo_move(self.moves.pop())
     def turn(self):
         return len(self.moves) % 2 == 0
-    def __str__(self):
-        s_board = str(self.board)
-        s_moves = ""
+    def pgn(self):
+        s = ""
         for i, move in enumerate(self.moves):
             if i % 2 == 0:
-                s_moves += f"{i//2 + 1}. "
-            s_moves += str(move) + " "
-        s_moves = s_moves[:-1]
+                s += f"{i//2 + 1}. "
+            s += str(move) + " "
+        return s
+    def __str__(self):
+        s_board = str(self.board)
+        s_moves = self.pgn()
         s_state = "White to move." if self.turn() == WHITE else "Black to move."
         return s_moves + "\n" + s_board + "\n" + s_state
 
@@ -388,8 +424,8 @@ class Game:
     
     def play_interactive(self):
         print("Game starting, to end game type 'exit'.")
+        print(self)
         while True:
-            print(self)
             moves = self.pseudo_legal_moves()
             if len(moves) == 0:
                 print("Game over.")
@@ -406,3 +442,9 @@ class Game:
                 self.move(random.choice(moves))
             else:
                 self.move(move)
+            print(self)
+    def is_check(self):
+        for move in self.pseudo_legal_moves():
+            if isinstance(self.board[move.end], King):
+                return True
+        return False
