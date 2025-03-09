@@ -62,21 +62,21 @@ class Piece:
         else:
             raise ValueError(f"Invalid piece name: {name}")
 
-class Position:
+class Square:
     def __init__(self, col, row):
         if isinstance(col, str):
             col = ord(col) - ord('a')
         if isinstance(row, str):
             row = int(row) - 1
         if not (0 <= col < 8 and 0 <= row < 8):
-            raise ValueError(f"Invalid position: ({col}, {row})")
+            raise ValueError(f"Invalid square: ({col}, {row})")
         self.col = col
         self.row = row
     def __str__(self):
         return f"{chr(97 + self.col)}{self.row + 1}"
     def __add__(self, other):
         dcol, drow = other
-        return Position(self.col + dcol, self.row + drow)
+        return Square(self.col + dcol, self.row + drow)
     def __getitem__(self, index):
         if index == 0:
             return self.col
@@ -88,16 +88,16 @@ class Position:
         return self.col == other.col and self.row == other.row
     @staticmethod
     def from_string(s):
-        return Position(s[0], s[1])
+        return Square(s[0], s[1])
 
 class Move:
     def __init__(self, start, end, promotion=None):
-        if not isinstance(start, Position):
-            start = Position(*start)
-        if not isinstance(end, Position):
-            end = Position(*end)
+        if not isinstance(start, Square):
+            start = Square(*start)
+        if not isinstance(end, Square):
+            end = Square(*end)
         if start == end:
-            raise ValueError("Start and end positions are the same.")
+            raise ValueError("Start and end squares are the same.")
         if isinstance(promotion, str):
             promotion = Piece.from_type(promotion, start.color)
         self.start = start
@@ -112,8 +112,8 @@ class Move:
         return (self.start, self.end, self.promotion) == (other.start, other.end, other.promotion)
     @staticmethod
     def from_string(s):
-        start= Position.from_string(s[:2])
-        end = Position.from_string(s[2:4])
+        start= Square.from_string(s[:2])
+        end = Square.from_string(s[2:4])
         if len(s) == 5:
             promotion = Piece.from_string(s[4])
         else:
@@ -269,11 +269,11 @@ class King(Piece):
             row = 0
         else:
             row = 7
-        if start == Position(4, row):
+        if start == Square(4, row):
             if board[5, row] is None and board[6, row] is None and board[7, row] == Rook(self.color):
-                moves.append(Move(start, Position(6, row)))
+                moves.append(Move(start, Square(6, row)))
             if board[3, row] is None and board[2, row] is None and board[1, row] is None and board[0, row] == Rook(self.color):
-                moves.append(Move(start, Position(2, row)))
+                moves.append(Move(start, Square(2, row)))
         return moves
 
 class Board:
@@ -285,7 +285,7 @@ class Board:
         new_board = Board()
         new_board.grid = [row.copy() for row in self.grid]
         return new_board
-    def set_starting_position(self):
+    def set_starting_square(self):
         self.clear()
         pieces= [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col in range(8):
@@ -294,11 +294,11 @@ class Board:
             self[col,6] = Pawn(BLACK)
             self[col,7] = pieces[col](BLACK)
 
-    def __getitem__(self, position):
-        return self.grid[position[0]][position[1]]
+    def __getitem__(self, square):
+        return self.grid[square[0]][square[1]]
     
-    def __setitem__(self, position, piece):
-        self.grid[position[0]][position[1]] = piece
+    def __setitem__(self, square, piece):
+        self.grid[square[0]][square[1]] = piece
 
     def move(self, move, show=False):
         if isinstance(move, str):
@@ -313,11 +313,11 @@ class Board:
         # Handle castling
         if isinstance(self[move.end], King) and abs(move.start.col - move.end.col) == 2:
             if move.end.col == 6:  # Kingside castling
-                self[Position(5, move.start.row)] = self[Position(7, move.start.row)]
-                self.clear(Position(7, move.start.row))
+                self[Square(5, move.start.row)] = self[Square(7, move.start.row)]
+                self.clear(Square(7, move.start.row))
             elif move.end.col == 2:  # Queenside castling
-                self[Position(3, move.start.row)] = self[Position(0, move.start.row)]
-                self.clear(Position(0, move.start.row))
+                self[Square(3, move.start.row)] = self[Square(0, move.start.row)]
+                self.clear(Square(0, move.start.row))
         # Handle en-passant
         if isinstance(self[move.end], Pawn) and move.start.col != move.end.col and self[move.end] is None:
             capture = self.clear(move.start + (move.end.col - move.start.col, 0))
@@ -334,11 +334,11 @@ class Board:
         # Handle castling
         if isinstance(self[move.start], King) and abs(move.start.col - move.end.col) == 2:
             if move.end.col == 6:
-                self[Position(7, move.start.row)] = self[Position(5, move.start.row)]
-                self.clear(Position(5, move.start.row))
+                self[Square(7, move.start.row)] = self[Square(5, move.start.row)]
+                self.clear(Square(5, move.start.row))
             elif move.end.col == 2:
-                self[Position(0, move.start.row)] = self[Position(3, move.start.row)]
-                self.clear(Position(3, move.start.row))
+                self[Square(0, move.start.row)] = self[Square(3, move.start.row)]
+                self.clear(Square(3, move.start.row))
         # Handle en-passant
         if isinstance(self[move.end], Pawn): 
             try:
@@ -354,10 +354,10 @@ class Board:
         board_copy = self.copy()
         board_copy.move(move, show=True)
 
-    def clear(self, position=None):
-        if position is not None:
-            piece = self[position]
-            self[position] = None
+    def clear(self, square=None):
+        if square is not None:
+            piece = self[square]
+            self[square] = None
             return piece
         else:
             self.grid = [[None for _ in range(8)] for _ in range(8)]
@@ -380,7 +380,7 @@ class Board:
             for row in range(8):
                 piece = self[col, row]
                 if piece is not None and piece.color == color:
-                    moves += piece.pseudo_legal_moves(self, Position(col, row))
+                    moves += piece.pseudo_legal_moves(self, Square(col, row))
         for i in range(len(moves)):
             moves[i].interpret(self)
         return moves
@@ -388,7 +388,7 @@ class Board:
 class Game:
     def __init__(self):
         self.board = Board()
-        self.board.set_starting_position()
+        self.board.set_starting_square()
         self.moves = []
     def __eq__(self, value):
         return isinstance(value, Game) and self.board == value.board and self.moves == value.moves
