@@ -140,7 +140,12 @@ class Move:
         return san
     def interpret(self, board):
         self.piece = board[self.start]
+        if self.piece is None:
+            raise ValueError("No piece on start square.")
         self.capture = board[self.end]
+        if self.capture is not None and self.capture.color == self.piece.color:
+            print(board,"\n",self,self.capture,self.piece,self.piece.color)
+            raise ValueError("Cannot capture own piece.",self,board)
         self.is_en_passant = (
             isinstance(self.piece, Pawn) and 
             self.start.col != self.end.col and 
@@ -153,42 +158,31 @@ class Move:
 class Pawn(Piece):
     def __init__(self, color):
         super().__init__(color, "pawn")
-    def pseudo_legal_moves(self, board, start):
+    def pseudo_legal_moves(self, game, start):
         moves=[]
         sign = 1 if self.color == WHITE else -1
         # one forward
         end = start + (0, sign)  # should always work
-        if board[end] is None:
+        if game.board[end] is None:
             moves.append(Move(start, end))
         # two forward
         if (start.row == 1 and self.color == WHITE) or (start.row == 6 and self.color == BLACK):
             end = start + (0, sign*2)
-            if board[end] is None and board[start + (0, sign)] is None:
+            if game.board[end] is None and game.board[start + (0, sign)] is None:
                 moves.append(Move(start, end))
-        # take
+        # take (and en-passant)
         for dcol in [-1, 1]:
             try:
                 end = start + (dcol, sign)
             except:
                 continue
             else:
-                piece = board[end]
+                piece = game.board[end]
                 if piece is not None and piece.color != self.color:
                     moves.append(Move(start, end))
-        # en-passant
-        if self.color == WHITE:
-            row = 4
-        else:
-            row = 3 
-        for dcol in [-1, 1]:
-            try:
-                end = start + (dcol, sign)
-            except:
-                continue
-            else:
-                piece = board[end + (0, -sign)]
-                if isinstance(piece, Pawn) and piece.color != self.color:
-                    moves.append(Move(start, end))
+                if game.en_passant_target() is not None:
+                    if end == game.en_passant_target():
+                        moves.append(Move(start, end))
         # handle promotions of added pawn moves
         for move in moves:
             if move.end.row in [0, 7]:
@@ -200,17 +194,17 @@ class Pawn(Piece):
 class Rook(Piece):
     def __init__(self, color):
         super().__init__(color, "rook")
-    def pseudo_legal_moves(self, board, start):
+    def pseudo_legal_moves(self, game, start):
         moves = []
         for dpos in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            moves += self.pseudo_legal_slide(board, start, dpos)
+            moves += self.pseudo_legal_slide(game.board, start, dpos)
         return moves
         
 
 class Knight(Piece):
     def __init__(self, color):
         super().__init__(color, "knight")
-    def pseudo_legal_moves(self, board, start):
+    def pseudo_legal_moves(self, game, start):
         moves = []
         for dpos in [(2, 1), (1, 2), (-1, 2), (-2, 1), (-2, -1), (-1, -2), (1, -2), (2, -1)]:
             try:
@@ -218,7 +212,7 @@ class Knight(Piece):
             except:
                 continue
             else:
-                piece = board[end]
+                piece = game.board[end]
                 if piece is None or piece.color != self.color:
                     moves.append(Move(start, end))
         return moves
@@ -227,29 +221,29 @@ class Knight(Piece):
 class Bishop(Piece):
     def __init__(self, color):
         super().__init__(color, "bishop")
-    def pseudo_legal_moves(self, board, start):
+    def pseudo_legal_moves(self, game, start):
         moves = []
         for dpos in [(1, 1), (-1, 1), (1, -1), (-1, -1)]:
-            moves += self.pseudo_legal_slide(board, start, dpos)
+            moves += self.pseudo_legal_slide(game.board, start, dpos)
         return moves
 
 class Queen(Piece):
     def __init__(self, color):
         super().__init__(color, "queen")
-    def pseudo_legal_moves(self, board, start):
+    def pseudo_legal_moves(self, game, start):
         moves = []
         for dcol in [-1, 0, 1]:
             for drow in [-1, 0, 1]:
                 if dcol == 0 and drow == 0:
                     continue
                 dpos = (dcol, drow)
-                moves += self.pseudo_legal_slide(board, start, dpos)
+                moves += self.pseudo_legal_slide(game.board, start, dpos)
         return moves
 
 class King(Piece):
     def __init__(self, color):
         super().__init__(color, "king")
-    def pseudo_legal_moves(self, board, start):
+    def pseudo_legal_moves(self, game, start):
         moves = []
         for dcol in [-1, 0, 1]:
             for drow in [-1, 0, 1]:
@@ -261,7 +255,7 @@ class King(Piece):
                 except:
                     continue
                 else:
-                    piece = board[end]
+                    piece = game.board[end]
                     if piece is None or piece.color != self.color:
                         moves.append(Move(start, end))
         #castling moves
@@ -269,11 +263,12 @@ class King(Piece):
             row = 0
         else:
             row = 7
-        if start == Square(4, row):
-            if board[5, row] is None and board[6, row] is None and board[7, row] == Rook(self.color):
-                moves.append(Move(start, Square(6, row)))
-            if board[3, row] is None and board[2, row] is None and board[1, row] is None and board[0, row] == Rook(self.color):
-                moves.append(Move(start, Square(2, row)))
+        if game.castling_rights()(self.color)["short"]:
+            if game.board[5, row] is None and game.board[6, row] is None:
+                moves.append(Move(start, start + (2, 0)))
+        if game.castling_rights()(self.color)["long"]:
+            if game.board[1, row] is None and game.board[2, row] is None and game.board[3, row] is None:
+                moves.append(Move(start, start + (-2, 0)))
         return moves
 
 class Board:
@@ -285,7 +280,7 @@ class Board:
         new_board = Board()
         new_board.grid = [row.copy() for row in self.grid]
         return new_board
-    def set_starting_square(self):
+    def set_starting_position(self):
         self.clear()
         pieces= [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col in range(8):
@@ -373,22 +368,11 @@ class Board:
         s += "   ––––––––––––––––\n"
         s += "    a b c d e f g h"
         return s
-    
-    def pseudo_legal_moves(self, color):
-        moves = []
-        for col in range(8):
-            for row in range(8):
-                piece = self[col, row]
-                if piece is not None and piece.color == color:
-                    moves += piece.pseudo_legal_moves(self, Square(col, row))
-        for i in range(len(moves)):
-            moves[i].interpret(self)
-        return moves
 
 class Game:
     def __init__(self):
         self.board = Board()
-        self.board.set_starting_square()
+        self.board.set_starting_position()
         self.moves = []
     def __eq__(self, value):
         return isinstance(value, Game) and self.board == value.board and self.moves == value.moves
@@ -406,6 +390,85 @@ class Game:
         return self.board.undo_move(self.moves.pop())
     def turn(self):
         return len(self.moves) % 2 == 0
+    def castling_rights(self):
+        # return dictionary with castling rights
+        rights = {"white_short": True, "white_long": True, "black_short": True, "black_long": True}
+        for move in self.moves:
+            # white
+            if move.start == Square(4, 0):
+                rights["white_short"] = False
+                rights["white_long"] = False
+            elif move.start == Square(0, 0):
+                rights["white_long"] = False
+            elif move.start == Square(7, 0):
+                rights["white_short"] = False
+            # black
+            elif move.start == Square(4, 7):
+                rights["black_short"] = False
+                rights["black_long"] = False
+            elif move.start == Square(0, 7):
+                rights["black_long"] = False
+            elif move.start == Square(7, 7):
+                rights["black_short"] = False
+        def rights2(color):
+            if color==WHITE:
+                return {"short": rights["white_short"], "long": rights["white_long"]}
+            else:
+                return {"short": rights["black_short"], "long": rights["black_long"]}
+        return rights2
+
+    def en_passant_target(self):
+        if len(self.moves) == 0:
+            return None
+        last_move = self.moves[-1]
+        if isinstance(last_move.piece, Pawn) and abs(last_move.start.row - last_move.end.row) == 2:
+            return last_move.end + (0, -1 if last_move.piece.color == WHITE else 1)
+        return None
+    def halfmove_clock(self):
+        # return the number of halfmoves since the last capture or pawn move
+        clock = 0
+        for move in reversed(self.moves):
+            if move.capture is not None or isinstance(move.piece, Pawn):
+                break
+            clock += 1
+        return clock
+    def fullmove_number(self):
+        return len(self.moves) // 2 + 1
+    def fen(self):
+        s = ""
+        for row in range(7, -1, -1):
+            for col in range(8):
+                piece = self.board[col, row]
+                if piece is None:
+                    s += "1"
+                else:
+                    s += piece.name
+            s += "/"
+        s = s[:-1]  # remove last slash
+        s += " "
+        s += "w" if self.turn() == WHITE else "b"
+        s += " "
+        rights = self.castling_rights()
+        if rights(WHITE)["short"]:
+            s += "K"
+        if rights(WHITE)["long"]:
+            s += "Q"
+        if rights(BLACK)["short"]:
+            s += "k"
+        if rights(BLACK)["long"]:
+            s += "q"
+        if not s[-1] == " ":
+            s += " "
+        en_passant = self.en_passant_target()
+        if en_passant is not None:
+            s += str(en_passant)
+        else:
+            s += "-"
+        s += " "
+        s += str(self.halfmove_clock())
+        s += " "
+        s += str(self.fullmove_number())
+        return s      
     def pgn(self):
         s = ""
         for i, move in enumerate(self.moves):
@@ -420,7 +483,15 @@ class Game:
         return s_moves + "\n" + s_board + "\n" + s_state
 
     def pseudo_legal_moves(self):
-        return self.board.pseudo_legal_moves(self.turn())
+        moves = []
+        for col in range(8):
+            for row in range(8):
+                piece = self.board[col, row]
+                if piece is not None and piece.color == self.turn():
+                    moves += piece.pseudo_legal_moves(self, Square(col, row))
+        for i in range(len(moves)):
+            moves[i].interpret(self.board)
+        return moves
     
     def play_interactive(self):
         print("Game starting, to end game type 'exit'.")
@@ -448,3 +519,33 @@ class Game:
             if isinstance(self.board[move.end], King):
                 return True
         return False
+    def pseudo_is_legal(self, move):
+        move.interpret(self.board)
+        assert move.piece.color == self.turn()
+        self.move(move)
+        next_moves = self.pseudo_legal_moves()
+        for next_move in next_moves:
+            if isinstance(next_move.capture, King):
+                self.undo_move()
+                return False
+        if move.is_castiling():
+            row=0 if move.piece.color==WHITE else 7
+            if move.is_short_castling():
+                for next_move in next_moves:
+                    if next_move.end.row==row and next_move.end.col in [4,5,6]:
+                        self.undo_move()
+                        return False
+            if move.is_long_castling():
+                for next_move in next_moves:
+                    if next_move.end.row==row and next_move.end.col in [4,3,2]:
+                        self.undo_move()
+                        return False
+        self.undo_move()
+        return True
+    def legal_moves(self):
+        moves = self.pseudo_legal_moves()
+        return [move for move in moves if self.pseudo_is_legal(move)]
+    def is_checkmate(self):
+        return self.is_check() and len(self.legal_moves()) == 0
+    def is_stalemate(self):
+        return not self.is_check() and len(self.legal_moves()) == 0
