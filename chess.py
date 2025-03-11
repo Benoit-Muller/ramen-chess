@@ -24,6 +24,8 @@ class Piece:
             self.symbol = self.symbols_black[self.types.index(type)]
     def __str__(self):
         return self.symbol
+    def __repr__(self):
+        return self.type.capitalize() + "(" + ("WHITE" if self.color == WHITE else "BLACK") + ")"
     def __eq__(self, value):
         return isinstance(value, Piece) and value.name == self.name
     def pseudo_legal_slide(self, board, start, dpos):
@@ -74,6 +76,8 @@ class Square:
         self.row = row
     def __str__(self):
         return f"{chr(97 + self.col)}{self.row + 1}"
+    def __repr__(self):
+        return f"Square({self.col}, {self.row})"
     def __add__(self, other):
         dcol, drow = other
         return Square(self.col + dcol, self.row + drow)
@@ -108,6 +112,8 @@ class Move:
             return self.pseudo_algebraic()
         except:
             return str(self.start)+str(self.end)
+    def __repr__(self):
+        return f"Move({self.start}, {self.end}, {self.promotion})"
     def __eq__(self, other):
         return (self.start, self.end, self.promotion) == (other.start, other.end, other.promotion)
     @staticmethod
@@ -144,8 +150,7 @@ class Move:
             raise ValueError("No piece on start square.")
         self.capture = board[self.end]
         if self.capture is not None and self.capture.color == self.piece.color:
-            print(board,"\n",self,self.capture,self.piece,self.piece.color)
-            raise ValueError("Cannot capture own piece.",self,board)
+            raise ValueError("Cannot capture own piece.")
         self.is_en_passant = (
             isinstance(self.piece, Pawn) and 
             self.start.col != self.end.col and 
@@ -497,13 +502,16 @@ class Game:
         print("Game starting, to end game type 'exit'.")
         print(self)
         while True:
-            moves = self.pseudo_legal_moves()
+            moves = self.legal_moves()
             if len(moves) == 0:
-                print("Game over.")
+                if self.is_check():
+                    print("Checkmate.")
+                else:
+                    print("Stalemate.")
                 break
             else:
                 print("Possible moves:",*moves)
-            move = input("Enter move: ")
+            move = input("Enter move in uci (or exit/undo/random): ")
             if move == "undo":
                 self.undo_move()
             elif move == "exit":
