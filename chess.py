@@ -185,8 +185,8 @@ class Pawn(Piece):
                 piece = game.board[end]
                 if piece is not None and piece.color != self.color:
                     moves.append(Move(start, end))
-                if game.en_passant_target() is not None:
-                    if end == game.en_passant_target():
+                if game.en_passant_target is not None:
+                    if end == game.en_passant_target:
                         moves.append(Move(start, end))
         # handle promotions of added pawn moves
         for move in moves:
@@ -268,10 +268,10 @@ class King(Piece):
             row = 0
         else:
             row = 7
-        if game.castling_rights()(self.color)["short"]:
+        if game.get_castling_rights(self.color)["short"]:
             if game.board[5, row] is None and game.board[6, row] is None:
                 moves.append(Move(start, start + (2, 0)))
-        if game.castling_rights()(self.color)["long"]:
+        if game.get_castling_rights(self.color)["long"]:
             if game.board[1, row] is None and game.board[2, row] is None and game.board[3, row] is None:
                 moves.append(Move(start, start + (-2, 0)))
         return moves
@@ -373,109 +373,158 @@ class Board:
         s += "   ––––––––––––––––\n"
         s += "    a b c d e f g h"
         return s
-
-class Game:
-    def __init__(self):
-        self.board = Board()
-        self.board.set_starting_position()
-        self.moves = []
-    def __eq__(self, value):
-        return isinstance(value, Game) and self.board == value.board and self.moves == value.moves
-    def copy(self):
-        new_game = Game()
-        new_game.board = self.board.copy()
-        new_game.moves = self.moves.copy()
-        return new_game
-    def move(self, move):
-        move = self.board.move(move)
-        self.moves.append(move)
-        # TODO: check if move is legal, rigth turn, etc.
-        return move
-    def undo_move(self):
-        return self.board.undo_move(self.moves.pop())
-    def turn(self):
-        return len(self.moves) % 2 == 0
-    def castling_rights(self):
-        # return dictionary with castling rights
-        rights = {"white_short": True, "white_long": True, "black_short": True, "black_long": True}
-        for move in self.moves:
-            # white
-            if move.start == Square(4, 0):
-                rights["white_short"] = False
-                rights["white_long"] = False
-            elif move.start == Square(0, 0):
-                rights["white_long"] = False
-            elif move.start == Square(7, 0):
-                rights["white_short"] = False
-            # black
-            elif move.start == Square(4, 7):
-                rights["black_short"] = False
-                rights["black_long"] = False
-            elif move.start == Square(0, 7):
-                rights["black_long"] = False
-            elif move.start == Square(7, 7):
-                rights["black_short"] = False
-        def rights2(color):
-            if color==WHITE:
-                return {"short": rights["white_short"], "long": rights["white_long"]}
-            else:
-                return {"short": rights["black_short"], "long": rights["black_long"]}
-        return rights2
-
-    def en_passant_target(self):
-        if len(self.moves) == 0:
-            return None
-        last_move = self.moves[-1]
-        if isinstance(last_move.piece, Pawn) and abs(last_move.start.row - last_move.end.row) == 2:
-            return last_move.end + (0, -1 if last_move.piece.color == WHITE else 1)
-        return None
-    def halfmove_clock(self):
-        # return the number of halfmoves since the last capture or pawn move
-        clock = 0
-        for move in reversed(self.moves):
-            if move.capture is not None or isinstance(move.piece, Pawn):
-                break
-            clock += 1
-        return clock
-    def fullmove_number(self):
-        return len(self.moves) // 2 + 1
     def fen(self):
         s = ""
         for row in range(7, -1, -1):
             for col in range(8):
-                piece = self.board[col, row]
+                piece = self.grid[col][row]
                 if piece is None:
                     s += "1"
                 else:
                     s += piece.name
             s += "/"
-        s = s[:-1]  # remove last slash
+        s = s[:-1]
+        return s
+
+class Position:
+    def __init__(self,board,turn,castling_rights,en_passant_target,halfmove_clock,fullmove_number):
+        self.board=board
+        self.turn=turn
+        self.castling_rights=castling_rights
+        self.en_passant_target=en_passant_target
+        self.halfmove_clock=halfmove_clock
+        self.fullmove_number=fullmove_number
+    @staticmethod
+    def starting():
+        board = Board()
+        board.set_starting_position()
+        return Position(
+            board=board,
+            turn=WHITE,
+            castling_rights={"white_short": True, "white_long": True, "black_short": True, "black_long": True},
+            en_passant_target=None,
+            halfmove_clock=0,
+            fullmove_number=1
+        )
+    def fen(self):
+        s = self.board.fen()
+        s += " " + ("w" if self.turn == WHITE else "b")
         s += " "
-        s += "w" if self.turn() == WHITE else "b"
-        s += " "
-        rights = self.castling_rights()
-        if rights(WHITE)["short"]:
-            s += "K"
-        if rights(WHITE)["long"]:
-            s += "Q"
-        if rights(BLACK)["short"]:
-            s += "k"
-        if rights(BLACK)["long"]:
-            s += "q"
+        s += "K" if self.castling_rights["white_short"] else ""
+        s += "Q" if self.castling_rights["white_long"] else ""
+        s += "k" if self.castling_rights["black_short"] else ""
+        s += "q" if self.castling_rights["black_long"] else ""
         if not s[-1] == " ":
             s += " "
-        en_passant = self.en_passant_target()
-        if en_passant is not None:
-            s += str(en_passant)
-        else:
+        if self.en_passant_target is None:
             s += "-"
+        else:
+            s += str(self.en_passant_target)
         s += " "
-        s += str(self.halfmove_clock())
+        s += str(self.halfmove_clock)
         s += " "
-        s += str(self.fullmove_number())
-        return s      
+        s += str(self.fullmove_number)
+        return s
+    def __str__(self):
+        return str(self.fen())
+    def __eq__(self, value):
+        return (
+            isinstance(value, Position) and 
+            self.board == value.board and 
+            self.turn == value.turn and 
+            self.castling_rights == value.castling_rights and 
+            self.en_passant_target == value.en_passant_target and 
+            self.halfmove_clock == value.halfmove_clock and 
+            self.fullmove_number == value.fullmove_number
+        )
+
+class Game:
+    def __init__(self,position=None):
+        if position is None:
+            position=Position.starting()
+            self.variant="standard"
+        else:
+            self.variant="from_position"
+        self.board = position.board
+        self.turn = position.turn
+        self.castling_rights = position.castling_rights
+        self.en_passant_target = position.en_passant_target
+        self.halfmove_clock = position.halfmove_clock
+        self.fullmove_number = position.fullmove_number
+        self.moves = []
+        self.positions=[]
+    def position(self):
+        return Position(
+            board=self.board.copy(),
+            turn=self.turn,
+            castling_rights=copy.deepcopy(self.castling_rights),
+            en_passant_target=self.en_passant_target,
+            halfmove_clock=self.halfmove_clock,
+            fullmove_number=self.fullmove_number
+        )
+    def move(self, move):
+        # TODO: check if move is legal, rigth turn, etc.
+        self.positions.append(self.position())
+        move = self.board.move(move)
+        self.moves.append(move)
+        self.turn = not self.turn
+        self.castling_rights = self.update_castling_rights(move)
+        if isinstance(move.piece, Pawn) and abs(move.start.row - move.end.row) == 2:
+            self.en_passant_target = move.end + (0, -1 if move.piece.color == WHITE else 1)
+        else:
+            self.en_passant_target = None
+        self.halfmove_clock = self.halfmove_clock + 1
+        if self.turn == WHITE:
+            self.fullmove_number += 1
+        return move
+    def undo_move(self):
+        if len(self.moves) == 0:
+            warnings.warn("No moves to undo.")
+            return
+        move = self.moves.pop()
+        position = self.positions.pop()
+        self.board = position.board
+        self.turn = position.turn
+        self.castling_rights = position.castling_rights
+        self.en_passant_target = position.en_passant_target
+        self.halfmove_clock = position.halfmove_clock
+        self.fullmove_number = position.fullmove_number
+        return move
+    def get_castling_rights(self,color=None):
+        if color is None:
+            return self.castling_rights
+        else:
+            if color == WHITE:
+                return {"short": self.castling_rights["white_short"], "long": self.castling_rights["white_long"]}
+            else:
+                return {"short": self.castling_rights["black_short"], "long": self.castling_rights["black_long"]}
+
+    def update_castling_rights(self,move):
+        rights = self.castling_rights
+        # white
+        if move.start == Square(4, 0):
+            rights["white_short"] = False
+            rights["white_long"] = False
+        elif move.start == Square(0, 0):
+            rights["white_long"] = False
+        elif move.start == Square(7, 0):
+            rights["white_short"] = False
+        # black
+        elif move.start == Square(4, 7):
+            rights["black_short"] = False
+            rights["black_long"] = False
+        elif move.start == Square(0, 7):
+            rights["black_long"] = False
+        elif move.start == Square(7, 7):
+            rights["black_short"] = False
+        return rights
+    def fen(self):
+        return self.position().fen()    
     def pgn(self):
-        s = ""
+        s=""
+        if self.variant=="from_position":
+            s+= '[Variant "From Position"]\n'
+            s += '[FEN "' + self.positions[0].fen() + '"]\n\n'
         for i, move in enumerate(self.moves):
             if i % 2 == 0:
                 s += f"{i//2 + 1}. "
@@ -484,7 +533,7 @@ class Game:
     def __str__(self):
         s_board = str(self.board)
         s_moves = self.pgn()
-        s_state = "White to move." if self.turn() == WHITE else "Black to move."
+        s_state = "White to move." if self.turn == WHITE else "Black to move."
         return s_moves + "\n" + s_board + "\n" + s_state
 
     def pseudo_legal_moves(self):
@@ -492,7 +541,7 @@ class Game:
         for col in range(8):
             for row in range(8):
                 piece = self.board[col, row]
-                if piece is not None and piece.color == self.turn():
+                if piece is not None and piece.color == self.turn:
                     moves += piece.pseudo_legal_moves(self, Square(col, row))
         for i in range(len(moves)):
             moves[i].interpret(self.board)
@@ -529,7 +578,7 @@ class Game:
         return False
     def pseudo_is_legal(self, move):
         move.interpret(self.board)
-        assert move.piece.color == self.turn()
+        assert move.piece.color == self.turn
         self.move(move)
         next_moves = self.pseudo_legal_moves()
         for next_move in next_moves:
