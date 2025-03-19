@@ -159,6 +159,8 @@ class Move:
         if self.is_en_passant:
             self.capture = board[self.end + (0, -1 if self.piece.color == WHITE else 1)]
         return self
+    def uci(self):
+        return str(self.start) + str(self.end) + (self.promotion.name if self.promotion is not None else "")
 
 class Pawn(Piece):
     def __init__(self, color):
@@ -385,6 +387,21 @@ class Board:
             s += "/"
         s = s[:-1]
         return s
+    @staticmethod
+    def from_fen(fen):
+        board = Board()
+        row = 7
+        col = 0
+        for c in fen:
+            if c == "/":
+                row -= 1
+                col = 0
+            elif c.isdigit():
+                col += int(c)
+            else:
+                board[col, row] = Piece.from_string(c)
+                col += 1
+        return board
 
 class Position:
     def __init__(self,board,turn,castling_rights,en_passant_target,halfmove_clock,fullmove_number):
@@ -437,7 +454,25 @@ class Position:
             self.halfmove_clock == value.halfmove_clock and 
             self.fullmove_number == value.fullmove_number
         )
-
+    @staticmethod
+    def from_fen(fen):
+        parts = fen.split(" ")
+        board = Board.from_fen(parts[0])
+        turn = parts[1] == "w"
+        castling_rights = {
+            "white_short": "K" in parts[2],
+            "white_long": "Q" in parts[2],
+            "black_short": "k" in parts[2],
+            "black_long": "q" in parts[2]
+        }
+        en_passant_target = None if parts[3] == "-" else Square.from_string(parts[3])
+        halfmove_clock = int(parts[4])
+        fullmove_number = int(parts[5])
+        return Position(board, turn, castling_rights, en_passant_target, halfmove_clock, fullmove_number)
+    @staticmethod
+    def from_python_chess(board):
+        return Position.from_fen(board.fen())
+        
 class Game:
     def __init__(self,position=None):
         if position is None:
