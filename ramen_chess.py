@@ -381,7 +381,10 @@ class Board:
             for col in range(8):
                 piece = self.grid[col][row]
                 if piece is None:
-                    s += "1"
+                    if len(s) > 0 and s[-1].isdigit():
+                        s = s[:-1] + str(int(s[-1]) + 1)
+                    else:
+                        s += "1"
                 else:
                     s += piece.name
             s += "/"
@@ -425,14 +428,16 @@ class Position:
         )
     def fen(self):
         s = self.board.fen()
-        s += " " + ("w" if self.turn == WHITE else "b")
+        s += " "
+        s += "w" if self.turn == WHITE else "b"
         s += " "
         s += "K" if self.castling_rights["white_short"] else ""
         s += "Q" if self.castling_rights["white_long"] else ""
         s += "k" if self.castling_rights["black_short"] else ""
         s += "q" if self.castling_rights["black_long"] else ""
-        if not s[-1] == " ":
-            s += " "
+        if s[-1] == " ":
+            s += "-"
+        s += " "
         if self.en_passant_target is None:
             s += "-"
         else:
@@ -471,7 +476,7 @@ class Position:
         return Position(board, turn, castling_rights, en_passant_target, halfmove_clock, fullmove_number)
     @staticmethod
     def from_python_chess(board):
-        return Position.from_fen(board.fen())
+        return Position.from_fen(board.fen(en_passant="fen"))
         
 class Game:
     def __init__(self,position=None):
@@ -568,7 +573,12 @@ class Game:
     def __str__(self):
         s_board = str(self.board)
         s_moves = self.pgn()
-        s_state = "White to move." if self.turn == WHITE else "Black to move."
+        if self.is_checkmate():
+            s_state = "Checkmate."
+        elif self.is_stalemate():
+            s_state = "Stalemate."
+        else:
+            s_state = "White to move." if self.turn == WHITE else "Black to move."
         return s_moves + "\n" + s_board + "\n" + s_state
 
     def pseudo_legal_moves(self):
