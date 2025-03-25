@@ -1,5 +1,6 @@
 import warnings
 import copy
+import chess
 
 
 WHITE = True
@@ -142,7 +143,7 @@ class Move:
             san += "x"
         san += str(self.end)
         if self.promotion is not None:
-            san += "=" + str(self.promotion)
+            san += "=" + self.promotion.name.upper()
         return san
     def interpret(self, board):
         self.piece = board[self.start]
@@ -160,7 +161,7 @@ class Move:
             self.capture = board[self.end + (0, -1 if self.piece.color == WHITE else 1)]
         return self
     def uci(self):
-        return str(self.start) + str(self.end) + (self.promotion.name if self.promotion is not None else "")
+        return str(self.start) + str(self.end) + (self.promotion.name.lower() if self.promotion is not None else "")
 
 class Pawn(Piece):
     def __init__(self, color):
@@ -191,7 +192,8 @@ class Pawn(Piece):
                     if end == game.en_passant_target:
                         moves.append(Move(start, end))
         # handle promotions of added pawn moves
-        for move in moves:
+        for i in range(len(moves)):
+            move=moves[i]
             if move.end.row in [0, 7]:
                 move.promotion = Queen(self.color)
                 for promotion in [Rook, Bishop, Knight]:
@@ -503,7 +505,7 @@ class Game:
             fullmove_number=self.fullmove_number
         )
     def move(self, move):
-        # TODO: check if move is legal, rigth turn, etc.
+        # TODO: check if move is legal, right turn, etc.
         self.positions.append(self.position())
         move = self.board.move(move)
         self.moves.append(move)
@@ -541,21 +543,22 @@ class Game:
 
     def update_castling_rights(self,move):
         rights = self.castling_rights
+        # using square but could use piece type, optimize also later
         # white
-        if move.start == Square(4, 0):
+        if Square(4, 0) in [move.start, move.end]:
             rights["white_short"] = False
             rights["white_long"] = False
-        elif move.start == Square(0, 0):
+        elif Square(0, 0) in [move.start, move.end]:
             rights["white_long"] = False
-        elif move.start == Square(7, 0):
+        elif Square(7, 0) in [move.start, move.end]:
             rights["white_short"] = False
         # black
-        elif move.start == Square(4, 7):
+        elif Square(4, 7) in [move.start, move.end]:
             rights["black_short"] = False
             rights["black_long"] = False
-        elif move.start == Square(0, 7):
+        elif Square(0, 7) in [move.start, move.end]:
             rights["black_long"] = False
-        elif move.start == Square(7, 7):
+        elif Square(7, 7) in [move.start, move.end]:
             rights["black_short"] = False
         return rights
     def fen(self):
@@ -564,7 +567,10 @@ class Game:
         s=""
         if self.variant=="from_position":
             s+= '[Variant "From Position"]\n'
-            s += '[FEN "' + self.positions[0].fen() + '"]\n\n'
+            if len(self.positions)>0:
+                s += '[FEN "' + self.positions[0].fen() + '"]\n\n'
+            else:
+                s += '[FEN "' + self.position().fen() + '"]\n\n'
         for i, move in enumerate(self.moves):
             if i % 2 == 0:
                 s += f"{i//2 + 1}. "
@@ -581,12 +587,14 @@ class Game:
             s_state = "White to move." if self.turn == WHITE else "Black to move."
         return s_moves + "\n" + s_board + "\n" + s_state
 
-    def pseudo_legal_moves(self):
+    def pseudo_legal_moves(self,color=None):
+        if color is None:
+            color = self.turn
         moves = []
         for col in range(8):
             for row in range(8):
                 piece = self.board[col, row]
-                if piece is not None and piece.color == self.turn:
+                if piece is not None and piece.color == color:
                     moves += piece.pseudo_legal_moves(self, Square(col, row))
         for i in range(len(moves)):
             moves[i].interpret(self.board)
@@ -617,7 +625,7 @@ class Game:
                 self.move(move)
             print(self)
     def is_check(self):
-        for move in self.pseudo_legal_moves():
+        for move in self.pseudo_legal_moves(not self.turn):
             if isinstance(self.board[move.end], King):
                 return True
         return False
@@ -651,3 +659,21 @@ class Game:
         return self.is_check() and len(self.legal_moves()) == 0
     def is_stalemate(self):
         return not self.is_check() and len(self.legal_moves()) == 0
+    def state(self):
+        if self.legal_moves() == 0:
+            if self.is_check():
+                return "checkmate"
+            else:
+                return "stalemate"
+        else:
+            return "playing"
+
+def translate(object):
+# Translate between python-chess and ramen-chess objects
+    if isinstance(object, chess.Move):
+        return Move.from_string(object.uci())
+    elif isinstance(object, Move):
+        return chess.Move.from_uci(object.uci())
+    elif isinstance(object, Position):
+        return chess.Board(object.fen())
+    
