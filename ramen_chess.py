@@ -78,7 +78,7 @@ class Square:
     def __str__(self):
         return f"{chr(97 + self.col)}{self.row + 1}"
     def __repr__(self):
-        return f"Square({self.col}, {self.row})"
+        return f"Square.from_string('{str(self)}')"
     def __add__(self, other):
         dcol, drow = other
         return Square(self.col + dcol, self.row + drow)
@@ -112,9 +112,9 @@ class Move:
         try:
             return self.pseudo_algebraic()
         except:
-            return str(self.start)+str(self.end)
+            return self.uci()
     def __repr__(self):
-        return f"Move({self.start}, {self.end}, {self.promotion})"
+        return f"Move.from_string('{self.uci()}')"
     def __eq__(self, other):
         return (self.start, self.end, self.promotion) == (other.start, other.end, other.promotion)
     @staticmethod
@@ -133,6 +133,7 @@ class Move:
     def is_castiling(self):
         return self.is_short_castling() or self.is_long_castling()
     def pseudo_algebraic(self):
+        # need to be interpreted first
         if self.is_short_castling():
             return "O-O"
         if self.is_long_castling():
@@ -281,8 +282,11 @@ class King(Piece):
         return moves
 
 class Board:
-    def __init__(self):
-        self.grid = [[None for _ in range(8)] for _ in range(8)]
+    def __init__(self,fen=None):
+        if fen is not None:
+            self.grid = Board.from_fen(fen).grid
+        else:
+            self.grid = [[None for _ in range(8)] for _ in range(8)]
     def __eq__(self, value):
         return isinstance(value, Board) and self.grid == value.grid
     def copy(self):
@@ -377,6 +381,8 @@ class Board:
         s += "   ––––––––––––––––\n"
         s += "    a b c d e f g h"
         return s
+    def __repr__(self):
+        return "Board.from_fen('" + self.fen() + "')"
     def fen(self):
         s = ""
         for row in range(7, -1, -1):
@@ -451,6 +457,8 @@ class Position:
         return s
     def __str__(self):
         return str(self.fen())
+    def __repr__(self):
+        return "Position.from_fen('" + self.fen() + "')"
     def __eq__(self, value):
         return (
             isinstance(value, Position) and 
@@ -476,9 +484,6 @@ class Position:
         halfmove_clock = int(parts[4])
         fullmove_number = int(parts[5])
         return Position(board, turn, castling_rights, en_passant_target, halfmove_clock, fullmove_number)
-    @staticmethod
-    def from_python_chess(board):
-        return Position.from_fen(board.fen(en_passant="fen"))
         
 class Game:
     def __init__(self,position=None):
@@ -486,6 +491,8 @@ class Game:
             position=Position.starting()
             self.variant="standard"
         else:
+            if isinstance(position,str):
+                position=Position.from_fen(position)
             self.variant="from_position"
         self.board = position.board
         self.turn = position.turn
@@ -586,6 +593,8 @@ class Game:
         else:
             s_state = "White to move." if self.turn == WHITE else "Black to move."
         return s_moves + "\n" + s_board + "\n" + s_state
+    def __repr__(self):
+        return "Game.from_fen('" + self.fen() + "')"
 
     def pseudo_legal_moves(self,color=None):
         if color is None:
@@ -676,4 +685,8 @@ def translate(object):
         return chess.Move.from_uci(object.uci())
     elif isinstance(object, Position):
         return chess.Board(object.fen())
+    elif isinstance(object, Game):
+        return translate(object.position())
+    elif isinstance(object, chess.Board):
+        return Game(object.fen())
     
