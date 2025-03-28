@@ -114,7 +114,10 @@ class Move:
         except:
             return self.uci()
     def __repr__(self):
-        return f"Move.from_string('{self.uci()}')"
+        s= f"Move('{self.start}','{self.end}'"
+        if self.promotion is not None:
+            s += f",'{self.promotion.name}'"
+        return s + ")" 
     def __eq__(self, other):
         return (self.start, self.end, self.promotion) == (other.start, other.end, other.promotion)
     @staticmethod
@@ -127,10 +130,13 @@ class Move:
             promotion = None
         return Move(start, end, promotion)
     def is_short_castling(self):
-        return isinstance(self.piece, King) and self.end.col - self.start.col == 2
+        # suppose a legal move
+        return self.uci() in ["e1g1", "e8g8"] and isinstance(self.piece, King)
     def is_long_castling(self):
-        return isinstance(self.piece, King) and self.end.col - self.start.col == -2
-    def is_castiling(self):
+        # suppose a legal move
+        return self.uci() in ["e1c1", "e8c8"] and isinstance(self.piece, King)
+    def is_castling(self):
+        # suppose a legal move
         return self.is_short_castling() or self.is_long_castling()
     def pseudo_algebraic(self):
         # need to be interpreted first
