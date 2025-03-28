@@ -94,7 +94,12 @@ class TestBoard(unittest.TestCase):
         self.assertNotEqual(self.board, board3)
     def test_getitem(self):
         self.assertEqual(self.board[Square(4, 0)], King(WHITE))
+        self.assertEqual(self.board[4,7], King(BLACK))
+    def test_setitem(self):
+        self.board[Square(4, 0)] = None
+        self.assertEqual(self.board[Square(4, 0)], None)
+        self.board[Square(4, 0)] = King(WHITE)
+        self.assertEqual(self.board[Square(4, 0)], King(WHITE))
 
-        if __name__ == "__main__":
-            print("Running tests...")
-            unittest.main()
+if __name__ == "__main__":
+    unittest.main()

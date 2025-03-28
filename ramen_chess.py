@@ -29,6 +29,23 @@ class Piece:
         return self.type.capitalize() + "(" + ("WHITE" if self.color == WHITE else "BLACK") + ")"
     def __eq__(self, value):
         return isinstance(value, Piece) and value.name == self.name
+    @staticmethod
+    def from_string(name):
+        color = name.isupper()
+        if name.lower() == "p":
+            return Pawn(color)
+        elif name.lower() == "r":
+            return Rook(color)
+        elif name.lower() == "n":
+            return Knight(color)
+        elif name.lower() == "b":
+            return Bishop(color)
+        elif name.lower() == "q":
+            return Queen(color)
+        elif name.lower() == "k":
+            return King(color)
+        else:
+            raise ValueError(f"Invalid piece name: {name}")
     def pseudo_legal_slide(self, board, start, dpos):
         """ Return a list of pseudo-legal sliding moves in the direction dpos. """
         moves = []
@@ -47,23 +64,6 @@ class Piece:
                         moves.append(Move(start, end))
                     break
         return moves
-    @staticmethod
-    def from_string(name):
-        color = name.isupper()
-        if name.lower() == "p":
-            return Pawn(color)
-        elif name.lower() == "r":
-            return Rook(color)
-        elif name.lower() == "n":
-            return Knight(color)
-        elif name.lower() == "b":
-            return Bishop(color)
-        elif name.lower() == "q":
-            return Queen(color)
-        elif name.lower() == "k":
-            return King(color)
-        else:
-            raise ValueError(f"Invalid piece name: {name}")
 
 class Square:
     def __init__(self, col, row):
@@ -96,7 +96,7 @@ class Square:
         return Square(s[0], s[1])
 
 class Move:
-    def __init__(self, start, end, promotion=None):
+    def __init__(self, start, end, promotion=None): # TODO: add draw/resign
         if not isinstance(start, Square):
             start = Square(*start)
         if not isinstance(end, Square):
@@ -138,20 +138,8 @@ class Move:
     def is_castling(self):
         # suppose a legal move
         return self.is_short_castling() or self.is_long_castling()
-    def pseudo_algebraic(self):
-        # need to be interpreted first
-        if self.is_short_castling():
-            return "O-O"
-        if self.is_long_castling():
-            return "O-O-O"
-        san = self.piece.name.upper()
-        san += str(self.start)
-        if self.capture is not None:
-            san += "x"
-        san += str(self.end)
-        if self.promotion is not None:
-            san += "=" + self.promotion.name.upper()
-        return san
+    def uci(self):
+        return str(self.start) + str(self.end) + (self.promotion.name.lower() if self.promotion is not None else "")
     def interpret(self, board):
         self.piece = board[self.start]
         if self.piece is None:
@@ -167,8 +155,20 @@ class Move:
         if self.is_en_passant:
             self.capture = board[self.end + (0, -1 if self.piece.color == WHITE else 1)]
         return self
-    def uci(self):
-        return str(self.start) + str(self.end) + (self.promotion.name.lower() if self.promotion is not None else "")
+    def pseudo_algebraic(self):
+        # need to be interpreted first
+        if self.is_short_castling():
+            return "O-O"
+        if self.is_long_castling():
+            return "O-O-O"
+        san = self.piece.name.upper()
+        san += str(self.start)
+        if self.capture is not None:
+            san += "x"
+        san += str(self.end)
+        if self.promotion is not None:
+            san += "=" + self.promotion.name.upper()
+        return san
 
 class Pawn(Piece):
     def __init__(self, color):
@@ -295,6 +295,39 @@ class Board:
             self.grid = [[None for _ in range(8)] for _ in range(8)]
     def __eq__(self, value):
         return isinstance(value, Board) and self.grid == value.grid
+    def __getitem__(self, square):
+        return self.grid[square[0]][square[1]]
+    
+    def __setitem__(self, square, piece):
+        self.grid[square[0]][square[1]] = piece
+    def __str__(self):
+        s = ""
+        for row in range(7, -1, -1):
+            s += str(row + 1) + " | "
+            for col in range(8):
+                piece = self.grid[col][row]
+                s += (str(piece) if piece else '.') + " "
+            s += "\n"
+        s += "   ––––––––––––––––\n"
+        s += "    a b c d e f g h"
+        return s
+    def __repr__(self):
+        return "Board.from_fen('" + self.fen() + "')"
+    @staticmethod
+    def from_fen(fen):
+        board = Board()
+        row = 7
+        col = 0
+        for c in fen:
+            if c == "/":
+                row -= 1
+                col = 0
+            elif c.isdigit():
+                col += int(c)
+            else:
+                board[col, row] = Piece.from_string(c)
+                col += 1
+        return board
     def copy(self):
         new_board = Board()
         new_board.grid = [row.copy() for row in self.grid]
@@ -307,13 +340,6 @@ class Board:
             self[col,1] = Pawn(WHITE)
             self[col,6] = Pawn(BLACK)
             self[col,7] = pieces[col](BLACK)
-
-    def __getitem__(self, square):
-        return self.grid[square[0]][square[1]]
-    
-    def __setitem__(self, square, piece):
-        self.grid[square[0]][square[1]] = piece
-
     def move(self, move, show=False):
         if isinstance(move, str):
             move = Move.from_string(move)
@@ -362,12 +388,9 @@ class Board:
             except:
                 raise ValueError("Missing en-passant information to undo move.")
         return move
-
-            
     def show_move(self, move):
         board_copy = self.copy()
         board_copy.move(move, show=True)
-
     def clear(self, square=None):
         if square is not None:
             piece = self[square]
@@ -375,20 +398,6 @@ class Board:
             return piece
         else:
             self.grid = [[None for _ in range(8)] for _ in range(8)]
-
-    def __str__(self):
-        s = ""
-        for row in range(7, -1, -1):
-            s += str(row + 1) + " | "
-            for col in range(8):
-                piece = self.grid[col][row]
-                s += (str(piece) if piece else '.') + " "
-            s += "\n"
-        s += "   ––––––––––––––––\n"
-        s += "    a b c d e f g h"
-        return s
-    def __repr__(self):
-        return "Board.from_fen('" + self.fen() + "')"
     def fen(self):
         s = ""
         for row in range(7, -1, -1):
@@ -404,21 +413,6 @@ class Board:
             s += "/"
         s = s[:-1]
         return s
-    @staticmethod
-    def from_fen(fen):
-        board = Board()
-        row = 7
-        col = 0
-        for c in fen:
-            if c == "/":
-                row -= 1
-                col = 0
-            elif c.isdigit():
-                col += int(c)
-            else:
-                board[col, row] = Piece.from_string(c)
-                col += 1
-        return board
 
 class Position:
     def __init__(self,board,turn,castling_rights,en_passant_target,halfmove_clock,fullmove_number):
@@ -428,6 +422,20 @@ class Position:
         self.en_passant_target=en_passant_target
         self.halfmove_clock=halfmove_clock
         self.fullmove_number=fullmove_number
+    def __str__(self):
+        return str(self.fen())
+    def __repr__(self):
+        return "Position.from_fen('" + self.fen() + "')"
+    def __eq__(self, value):
+        return (
+            isinstance(value, Position) and 
+            self.board == value.board and 
+            self.turn == value.turn and 
+            self.castling_rights == value.castling_rights and 
+            self.en_passant_target == value.en_passant_target and 
+            self.halfmove_clock == value.halfmove_clock and 
+            self.fullmove_number == value.fullmove_number
+        )
     @staticmethod
     def starting():
         board = Board()
@@ -440,6 +448,21 @@ class Position:
             halfmove_clock=0,
             fullmove_number=1
         )
+    @staticmethod
+    def from_fen(fen):
+        parts = fen.split(" ")
+        board = Board.from_fen(parts[0])
+        turn = parts[1] == "w"
+        castling_rights = {
+            "white_short": "K" in parts[2],
+            "white_long": "Q" in parts[2],
+            "black_short": "k" in parts[2],
+            "black_long": "q" in parts[2]
+        }
+        en_passant_target = None if parts[3] == "-" else Square.from_string(parts[3])
+        halfmove_clock = int(parts[4])
+        fullmove_number = int(parts[5])
+        return Position(board, turn, castling_rights, en_passant_target, halfmove_clock, fullmove_number)
     def fen(self):
         s = self.board.fen()
         s += " "
@@ -461,35 +484,6 @@ class Position:
         s += " "
         s += str(self.fullmove_number)
         return s
-    def __str__(self):
-        return str(self.fen())
-    def __repr__(self):
-        return "Position.from_fen('" + self.fen() + "')"
-    def __eq__(self, value):
-        return (
-            isinstance(value, Position) and 
-            self.board == value.board and 
-            self.turn == value.turn and 
-            self.castling_rights == value.castling_rights and 
-            self.en_passant_target == value.en_passant_target and 
-            self.halfmove_clock == value.halfmove_clock and 
-            self.fullmove_number == value.fullmove_number
-        )
-    @staticmethod
-    def from_fen(fen):
-        parts = fen.split(" ")
-        board = Board.from_fen(parts[0])
-        turn = parts[1] == "w"
-        castling_rights = {
-            "white_short": "K" in parts[2],
-            "white_long": "Q" in parts[2],
-            "black_short": "k" in parts[2],
-            "black_long": "q" in parts[2]
-        }
-        en_passant_target = None if parts[3] == "-" else Square.from_string(parts[3])
-        halfmove_clock = int(parts[4])
-        fullmove_number = int(parts[5])
-        return Position(board, turn, castling_rights, en_passant_target, halfmove_clock, fullmove_number)
         
 class Game:
     def __init__(self,position=None):
@@ -508,6 +502,26 @@ class Game:
         self.fullmove_number = position.fullmove_number
         self.moves = []
         self.positions=[]
+    def __str__(self):
+        s_board = str(self.board)
+        s_moves = self.pgn()
+        if self.is_checkmate():
+            s_state = "Checkmate."
+        elif self.is_stalemate():
+            s_state = "Stalemate."
+        else:
+            s_state = "White to move." if self.turn == WHITE else "Black to move."
+        return s_moves + "\n" + s_board + "\n" + s_state
+    def __repr__(self):
+        return "Game.from_fen('" + self.fen() + "')"
+    def get_castling_rights(self,color=None):
+        if color is None:
+            return self.castling_rights
+        else:
+            if color == WHITE:
+                return {"short": self.castling_rights["white_short"], "long": self.castling_rights["white_long"]}
+            else:
+                return {"short": self.castling_rights["black_short"], "long": self.castling_rights["black_long"]}
     def position(self):
         return Position(
             board=self.board.copy(),
@@ -545,15 +559,6 @@ class Game:
         self.halfmove_clock = position.halfmove_clock
         self.fullmove_number = position.fullmove_number
         return move
-    def get_castling_rights(self,color=None):
-        if color is None:
-            return self.castling_rights
-        else:
-            if color == WHITE:
-                return {"short": self.castling_rights["white_short"], "long": self.castling_rights["white_long"]}
-            else:
-                return {"short": self.castling_rights["black_short"], "long": self.castling_rights["black_long"]}
-
     def update_castling_rights(self,move):
         rights = self.castling_rights
         # using square but could use piece type, optimize also later
@@ -574,34 +579,6 @@ class Game:
         elif Square(7, 7) in [move.start, move.end]:
             rights["black_short"] = False
         return rights
-    def fen(self):
-        return self.position().fen()    
-    def pgn(self):
-        s=""
-        if self.variant=="from_position":
-            s+= '[Variant "From Position"]\n'
-            if len(self.positions)>0:
-                s += '[FEN "' + self.positions[0].fen() + '"]\n\n'
-            else:
-                s += '[FEN "' + self.position().fen() + '"]\n\n'
-        for i, move in enumerate(self.moves):
-            if i % 2 == 0:
-                s += f"{i//2 + 1}. "
-            s += str(move) + " "
-        return s
-    def __str__(self):
-        s_board = str(self.board)
-        s_moves = self.pgn()
-        if self.is_checkmate():
-            s_state = "Checkmate."
-        elif self.is_stalemate():
-            s_state = "Stalemate."
-        else:
-            s_state = "White to move." if self.turn == WHITE else "Black to move."
-        return s_moves + "\n" + s_board + "\n" + s_state
-    def __repr__(self):
-        return "Game.from_fen('" + self.fen() + "')"
-
     def pseudo_legal_moves(self,color=None):
         if color is None:
             color = self.turn
@@ -614,31 +591,6 @@ class Game:
         for i in range(len(moves)):
             moves[i].interpret(self.board)
         return moves
-    
-    def play_interactive(self):
-        print("Game starting, to end game type 'exit'.")
-        print(self)
-        while True:
-            moves = self.legal_moves()
-            if len(moves) == 0:
-                if self.is_check():
-                    print("Checkmate.")
-                else:
-                    print("Stalemate.")
-                break
-            else:
-                print("Possible moves:",*moves)
-            move = input("Enter move in uci (or exit/undo/random): ")
-            if move == "undo":
-                self.undo_move()
-            elif move == "exit":
-                break
-            elif move == "random":
-                import random
-                self.move(random.choice(moves))
-            else:
-                self.move(move)
-            print(self)
     def is_check(self):
         for move in self.pseudo_legal_moves(not self.turn):
             if isinstance(self.board[move.end], King):
@@ -681,7 +633,46 @@ class Game:
             else:
                 return "stalemate"
         else:
-            return "playing"
+            return "WHite to play" if self.turn == WHITE else "Black to play"
+    def play_interactive(self):
+        print("Game starting, to end game type 'exit'.")
+        print(self)
+        while True:
+            moves = self.legal_moves()
+            if len(moves) == 0:
+                if self.is_check():
+                    print("Checkmate.")
+                else:
+                    print("Stalemate.")
+                break
+            else:
+                print("Possible moves:",*moves)
+            move = input("Enter move in uci (or exit/undo/random): ")
+            if move == "undo":
+                self.undo_move()
+            elif move == "exit":
+                break
+            elif move == "random":
+                import random
+                self.move(random.choice(moves))
+            else:
+                self.move(move)
+            print(self)
+    def fen(self):
+        return self.position().fen()    
+    def pgn(self):
+        s=""
+        if self.variant=="from_position":
+            s+= '[Variant "From Position"]\n'
+            if len(self.positions)>0:
+                s += '[FEN "' + self.positions[0].fen() + '"]\n\n'
+            else:
+                s += '[FEN "' + self.position().fen() + '"]\n\n'
+        for i, move in enumerate(self.moves):
+            if i % 2 == 0:
+                s += f"{i//2 + 1}. "
+            s += str(move) + " "
+        return s
 
 def translate(object):
 # Translate between python-chess and ramen-chess objects
