@@ -1,5 +1,7 @@
 import unittest
 from ramen_chess import *
+import chess
+import random
 
 class TestPiece(unittest.TestCase):
     def setUp(self):
@@ -83,12 +85,14 @@ class TestMove(unittest.TestCase):
 
 class TestBoard(unittest.TestCase):
     def setUp(self):
-        self.board = Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
+        self.fen= "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+        self.board = Board(self.fen)
     def test_init(self):
         self.assertEqual(self.board.grid[4][0], King(WHITE))
         self.assertEqual(Board().grid[4][0], None)
     def test_eq(self):
-        board2 = Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
+        self.assertEqual(self.board, self.board)
+        board2 = Board(self.fen)
         self.assertEqual(self.board, board2)
         board3 = Board("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNQ")
         self.assertNotEqual(self.board, board3)
@@ -100,6 +104,76 @@ class TestBoard(unittest.TestCase):
         self.assertEqual(self.board[Square(4, 0)], None)
         self.board[Square(4, 0)] = King(WHITE)
         self.assertEqual(self.board[Square(4, 0)], King(WHITE))
+    def test_str(self):
+        self.assertEqual(self.board.fen(), self.fen)
+    def test_repr(self):
+        self.assertEqual(repr(self.board), "Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')")
+    def test_copy(self):
+        board2 = self.board.copy()
+        self.assertEqual(self.board, board2)
+        self.assertIsNot(self.board, board2)
+    def test_move(self):
+        move = Move("e2", "e4")
+        self.board.move(move)
+        self.assertIsNone(self.board[Square("e","2")])
+        self.assertEqual(self.board[Square("e","4")], Pawn(WHITE))
+    def test_fen(self):
+        self.assertEqual(self.board.fen(), self.fen)
+
+class TestPosition(unittest.TestCase):
+    def setUp(self):
+        self.fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        self.position = Position.from_fen(self.fen)
+    def test_init(self):
+        self.assertEqual(self.position.board, Board(self.position.board.fen()))
+        self.assertEqual(self.position.turn, WHITE)
+        self.assertEqual(self.position.castling_rights["white_short"], True)
+        self.assertIs(self.position.en_passant_target, None)
+        self.assertEqual(self.position.halfmove_clock, 0)
+        self.assertEqual(self.position.fullmove_number, 1)
+    def test_str(self):
+        self.assertEqual(str(self.position), self.fen)
+    def test_eq(self):
+        position2 = Position.from_fen(self.fen)
+        self.assertEqual(self.position, position2)
+        position3 = Position.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2")
+        self.assertNotEqual(self.position, position3)
+    def test_copy(self):
+        position2 = self.position.copy()
+        self.assertEqual(self.position, position2)
+        self.assertIsNot(self.position, position2)
+    def fen(self):
+        self.assertEqual(self.position.fen(), self.fen)
+
+class TestGame(unittest.TestCase):
+    def setUp(self):
+        self.fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        self.game = Game(self.fen)
+    def test_init(self):
+        self.assertEqual(self.game.position(), Position.from_fen(self.fen))
+    def test_move(self):
+        move = Move("e2", "e4")
+        self.game.move(move)
+        self.assertEqual(self.game.board[Square("e","4")], Pawn(WHITE))
+        self.assertIsNone(self.game.board[Square("e","2")])
+        self.game.undo_move()
+        self.assertEqual(self.game.fen(), self.fen)
+    def test_move_generation(self):
+        for repeat in range(10):
+            game = Game()
+            for i in range(200):
+                p_board = chess.Board(game.fen())
+                fen = game.fen()
+                p_fen = p_board.fen(en_passant="fen")
+                self.assertEqual(fen, p_fen)
+                moves = game.legal_moves()
+                moves_uci = {move.uci() for move in moves}
+                p_moves_uci = {move.uci() for move in p_board.legal_moves}
+                self.assertEqual(moves_uci, p_moves_uci)
+                if len(moves) == 0:
+                    break
+                else:
+                    game.move(random.choice(moves))
 
 if __name__ == "__main__":
     unittest.main()

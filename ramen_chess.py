@@ -202,7 +202,7 @@ class Pawn(Piece):
         for i in range(len(moves)):
             move=moves[i]
             if move.end.row in [0, 7]:
-                move.promotion = Queen(self.color)
+                move.promotion = Queen(self.color) # inplace modification, but should be ok
                 for promotion in [Rook, Bishop, Knight]:
                     moves.append(Move(move.start, move.end, promotion(self.color)))
         return moves
@@ -279,12 +279,37 @@ class King(Piece):
             row = 0
         else:
             row = 7
-        if game.get_castling_rights(self.color)["short"]:
-            if game.board[5, row] is None and game.board[6, row] is None:
-                moves.append(Move(start, start + (2, 0)))
-        if game.get_castling_rights(self.color)["long"]:
-            if game.board[1, row] is None and game.board[2, row] is None and game.board[3, row] is None:
-                moves.append(Move(start, start + (-2, 0)))
+        short_path_is_clear = (game.get_castling_rights(self.color)["short"]
+            and game.board[5, row] is None
+            and game.board[6, row] is None )
+        long_path_is_clear = (game.get_castling_rights(self.color)["long"]
+            and game.board[3, row] is None
+            and game.board[2, row] is None
+            and game.board[1, row] is None)
+        if short_path_is_clear:
+            move=Move(start, start + (2, 0))
+            game.move(move)
+            next_moves = game.pseudo_legal_moves()
+            game.undo_move()
+            short_path_is_safe = True
+            for next_move in next_moves:
+                if next_move.end in [Square(4, row), Square(5, row), Square(6, row)]:
+                    short_path_is_safe=False
+                    break
+            if short_path_is_safe:
+                moves.append(move)
+        if long_path_is_clear:
+            move=Move(start, start + (-2, 0))
+            game.move(move)
+            next_moves = game.pseudo_legal_moves()
+            game.undo_move()
+            long_path_is_safe = True
+            for next_move in next_moves:
+                if next_move.end in [Square(4, row), Square(3, row), Square(2, row)]:
+                    long_path_is_safe=False
+                    break
+            if long_path_is_safe:
+                moves.append(move)
         return moves
 
 class Board:
@@ -297,7 +322,6 @@ class Board:
         return isinstance(value, Board) and self.grid == value.grid
     def __getitem__(self, square):
         return self.grid[square[0]][square[1]]
-    
     def __setitem__(self, square, piece):
         self.grid[square[0]][square[1]] = piece
     def __str__(self):
@@ -312,7 +336,15 @@ class Board:
         s += "    a b c d e f g h"
         return s
     def __repr__(self):
-        return "Board.from_fen('" + self.fen() + "')"
+        return "Board('" + self.fen() + "')"
+    def __copy__(self):
+        board= Board()
+        board.grid = [row.copy() for row in self.grid]
+        return board
+    def __deepcopy__(self):
+        return Board(self.fen())
+    def copy(self):
+        return self.__copy__()
     @staticmethod
     def from_fen(fen):
         board = Board()
@@ -328,11 +360,7 @@ class Board:
                 board[col, row] = Piece.from_string(c)
                 col += 1
         return board
-    def copy(self):
-        new_board = Board()
-        new_board.grid = [row.copy() for row in self.grid]
-        return new_board
-    def set_starting_position(self):
+    def set_starting_position(self): # could be made with fen
         self.clear()
         pieces= [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col in range(8):
@@ -436,6 +464,26 @@ class Position:
             self.halfmove_clock == value.halfmove_clock and 
             self.fullmove_number == value.fullmove_number
         )
+    def __copy__(self):
+        return Position(
+            self.board.copy(),
+            self.turn,
+            self.castling_rights.copy(),
+            self.en_passant_target,
+            self.halfmove_clock,
+            self.fullmove_number
+        )
+    def __deepcopy__(self):
+        return Position(
+            self.board.deepcopy(),
+            self.turn,
+            copy.deepcopy(self.castling_rights),
+            self.en_passant_target,
+            self.halfmove_clock,
+            self.fullmove_number
+        )
+    def copy(self):
+        return self.__copy__()
     @staticmethod
     def starting():
         board = Board()
@@ -512,8 +560,6 @@ class Game:
         else:
             s_state = "White to move." if self.turn == WHITE else "Black to move."
         return s_moves + "\n" + s_board + "\n" + s_state
-    def __repr__(self):
-        return "Game.from_fen('" + self.fen() + "')"
     def get_castling_rights(self,color=None):
         if color is None:
             return self.castling_rights
@@ -591,8 +637,10 @@ class Game:
         for i in range(len(moves)):
             moves[i].interpret(self.board)
         return moves
-    def is_check(self):
-        for move in self.pseudo_legal_moves(not self.turn):
+    def is_check(self,color=None):
+        if color is None:
+            color = self.turn
+        for move in self.pseudo_legal_moves(not color):
             if isinstance(self.board[move.end], King):
                 return True
         return False
@@ -601,23 +649,20 @@ class Game:
         assert move.piece.color == self.turn
         self.move(move)
         next_moves = self.pseudo_legal_moves()
+        self.undo_move()
         for next_move in next_moves:
             if isinstance(next_move.capture, King):
-                self.undo_move()
                 return False
-        if move.is_castiling():
+        if move.is_castling() and False: # implemented in King.pseudo_legal_moves
             row=0 if move.piece.color==WHITE else 7
             if move.is_short_castling():
                 for next_move in next_moves:
                     if next_move.end.row==row and next_move.end.col in [4,5,6]:
-                        self.undo_move()
                         return False
             if move.is_long_castling():
                 for next_move in next_moves:
                     if next_move.end.row==row and next_move.end.col in [4,3,2]:
-                        self.undo_move()
                         return False
-        self.undo_move()
         return True
     def legal_moves(self):
         moves = self.pseudo_legal_moves()
