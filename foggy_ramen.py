@@ -22,13 +22,15 @@ class Engine:
         state=self.game.state()
         if state == "checkmate":
             if self.game.turn == WHITE:
-                return -9999
+                return float("-inf")
             else:
-                return 9999
+                return float("inf")
         elif state == "stalemate":
             return 0
         else:
             return self.material_score()
+    def heuristical_score_pseudo(self):
+        return self.material_score() 
     def brute_force(self,depth=3):
         if depth == 0:
             return self.heuristical_score()
@@ -41,6 +43,13 @@ class Engine:
             scores.append(self.brute_force(depth-1))
             self.game.undo_move()
         return max(scores) if self.game.turn == WHITE else min(scores)
+    def brute_force_pseudo(self,depth=3):
+        if depth == 0:
+            return self.heuristical_score_pseudo()
+        try:
+            moves = self.game.pseudo_legal_moves()
+        except KingCaptureError:
+            # TODO: continue
     def best_move(self,depth=3,display=False):
         moves = self.game.legal_moves()
         scores = []

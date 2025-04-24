@@ -2,6 +2,8 @@ import warnings
 import copy
 import chess
 
+class KingCaptureError(ValueError):
+    pass
 
 WHITE = True
 BLACK = False
@@ -147,6 +149,8 @@ class Move:
         self.capture = board[self.end]
         if self.capture is not None and self.capture.color == self.piece.color:
             raise ValueError("Cannot capture own piece.")
+        if isinstance(self.capture, King):
+            raise KingCaptureError("Last move was illegal.")
         self.is_en_passant = (
             isinstance(self.piece, Pawn) and 
             self.start.col != self.end.col and 
